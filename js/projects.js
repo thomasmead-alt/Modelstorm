@@ -66,7 +66,13 @@ const Projects = {
           Start by creating your first data warehouse project.<br>
           Each project holds your BEAM event models and generates star schema diagrams.
         </p>
-        <button class="btn btn-primary" onclick="Projects.openNewModal()">+ Create your first project</button>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="Projects.openNewModal()">+ Create your first project</button>
+          <button class="btn btn-secondary" onclick="loadExample()">Load example: Financial Margin Reporting</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-subtle);margin-top:12px">
+          The example includes a pre-built BEAM matrix for a financial margin reporting data warehouse.
+        </p>
       </div>
     `;
   },

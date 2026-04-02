@@ -18,13 +18,16 @@ const Export = {
 
   // Export a single event's BEAM matrix as CSV
   eventToCSV(event) {
-    const headers = ['Column Name', 'Category', 'Category Label', '7W Meaning', 'Data Type', 'Description', 'Notes'];
+    const headers = ['Column Name', 'Category', 'Category Label', '7W Meaning', 'Origin', 'Origin Label', 'Data Type', 'Format / Examples', 'Description', 'Notes'];
     const rows = event.columns.map(col => [
       col.name,
       col.category,
       CATEGORIES[col.category]?.label || col.category,
       CATEGORIES[col.category]?.meaning || '',
+      col.source || 'source_system',
+      SOURCES[col.source || 'source_system']?.label || col.source || 'Source System',
       col.dataType,
+      col.format || '',
       col.description || '',
       col.notes || ''
     ]);
@@ -40,13 +43,16 @@ const Export = {
   // Export all events in a project as CSV (multi-sheet-style, separated by blank lines)
   projectToCSV(project) {
     const sections = project.events.map(event => {
-      const headers = ['Event', 'Column Name', 'Category', 'Category Label', 'Data Type', 'Description', 'Notes'];
+      const headers = ['Event', 'Column Name', 'Category', 'Category Label', 'Origin', 'Origin Label', 'Data Type', 'Format / Examples', 'Description', 'Notes'];
       const rows = event.columns.map(col => [
         event.name,
         col.name,
         col.category,
         CATEGORIES[col.category]?.label || col.category,
+        col.source || 'source_system',
+        SOURCES[col.source || 'source_system']?.label || col.source || 'Source System',
         col.dataType,
+        col.format || '',
         col.description || '',
         col.notes || ''
       ]);

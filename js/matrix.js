@@ -1,11 +1,12 @@
 const Matrix = {
-  // Track drag state
   _dragSrc: null,
 
   renderEvent(eventId) {
     const found = Storage.getEvent(eventId);
     if (!found) { Router.navigate('projects'); return; }
     const { event, project } = found;
+
+    const sourceSummary = this._sourceSummary(event.columns);
 
     const app = document.getElementById('app');
     app.innerHTML = `
@@ -19,6 +20,7 @@ const Matrix = {
         </div>
         <div class="view-actions">
           <button class="btn btn-ghost btn-sm" onclick="Matrix.openRenameModal('${project.id}', '${event.id}')">Rename Event</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('datagen/${event.id}')">⚡ Generate Sample Data</button>
           <button class="btn btn-secondary btn-sm" onclick="Router.navigate('diagram/${event.id}')">View Diagram →</button>
         </div>
       </div>
@@ -30,11 +32,14 @@ const Matrix = {
 
       <div class="info-banner" id="matrixBanner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'" title="Dismiss">✕</button>
-        <strong>BEAM Matrix</strong> — Describe each attribute of this business event by assigning a
-        <strong>7W category</strong>. Non-measure categories (Who, What, When, Where, How, Why) become
-        <em>dimension tables</em>; <em>How many</em> columns become <em>facts</em> in the central fact table.
+        <strong>BEAM Matrix</strong> — Describe each attribute of this business event. Assign a
+        <strong>7W category</strong> to each column and mark whether it comes from the
+        <strong>source system</strong> or will be <strong>derived</strong> in the data layer.
+        Populate the <em>Format / Examples</em> column to enable synthetic data generation.
         <a href="#" class="info-link" onclick="Matrix.show7WGuide(event)">See the 7W guide →</a>
       </div>
+
+      ${sourceSummary}
 
       <div class="matrix-toolbar">
         <div class="matrix-toolbar-left">
@@ -60,17 +65,21 @@ const Matrix = {
                 7W Category
                 <div class="th-hint">Who · What · When · Where · How · Why · How many</div>
               </th>
+              <th class="col-source">
+                Origin
+                <div class="th-hint">Source system or derived in data layer</div>
+              </th>
               <th class="col-type">
                 Data Type
-                <div class="th-hint">SQL/logical data type</div>
+                <div class="th-hint">SQL / logical data type</div>
+              </th>
+              <th class="col-format">
+                Format / Examples
+                <div class="th-hint">Example values or range — used to generate sample data</div>
               </th>
               <th class="col-desc">
                 Description
                 <div class="th-hint">What this attribute represents</div>
-              </th>
-              <th class="col-notes">
-                Notes
-                <div class="th-hint">Example values, constraints, source</div>
               </th>
               <th class="col-del"></th>
             </tr>
@@ -86,6 +95,19 @@ const Matrix = {
           <button class="btn btn-ghost btn-sm" onclick="Matrix.addRow('${event.id}')">+ Add another column</button>
         </div>
       `}
+
+      <div class="origin-guide">
+        <h3 class="ref-title">Origin Guide</h3>
+        <div class="origin-guide-grid">
+          ${Object.entries(SOURCES).map(([key, s]) => `
+            <div class="origin-card">
+              <span class="source-badge source-${key}">${s.label}</span>
+              <div class="origin-desc">${s.description}</div>
+              <div class="origin-example">${s.formatHint}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
 
       <div class="sevenw-reference" id="sevenWRef">
         <h3 class="ref-title">7W Quick Reference</h3>
@@ -105,6 +127,20 @@ const Matrix = {
     this._attachDragHandlers(event.id);
   },
 
+  _sourceSummary(columns) {
+    if (!columns.length) return '';
+    const counts = {};
+    columns.forEach(c => {
+      const s = c.source || 'source_system';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    const chips = Object.entries(counts).map(([key, n]) => {
+      const s = SOURCES[key] || { label: key };
+      return `<span class="source-chip source-${key}">${s.label}: <strong>${n}</strong></span>`;
+    }).join('');
+    return `<div class="source-summary">${chips}</div>`;
+  },
+
   _row(col, index) {
     const catOptions = Object.entries(CATEGORIES).map(([key, c]) =>
       `<option value="${key}" ${col.category === key ? 'selected' : ''} style="color:${c.color}">${c.label} — ${c.meaning}</option>`
@@ -114,7 +150,12 @@ const Matrix = {
       `<option value="${t}" ${col.dataType === t ? 'selected' : ''}>${t}</option>`
     ).join('');
 
+    const sourceOptions = Object.entries(SOURCES).map(([key, s]) =>
+      `<option value="${key}" ${(col.source || 'source_system') === key ? 'selected' : ''}>${s.label}</option>`
+    ).join('');
+
     const cat = CATEGORIES[col.category] || {};
+    const src = col.source || 'source_system';
     return `
       <tr data-col-id="${col.id}" draggable="true" class="matrix-row">
         <td class="col-drag">
@@ -136,21 +177,28 @@ const Matrix = {
           </div>
           <div class="cat-tooltip" id="tooltip-${col.id}">${cat.meaning || ''}</div>
         </td>
+        <td class="col-source">
+          <select class="cell-select source-select source-select-${src}"
+            onchange="Matrix.updateSource('${col.id}', this.value, this)">
+            ${sourceOptions}
+          </select>
+        </td>
         <td class="col-type">
           <select class="cell-select"
             onchange="Matrix.updateField('${col.id}', 'dataType', this.value)">
             ${typeOptions}
           </select>
         </td>
+        <td class="col-format">
+          <input class="cell-input format-input" type="text" value="${this._esc(col.format || '')}"
+            placeholder="${this._formatPlaceholder(col.dataType)}"
+            title="Used for synthetic data generation"
+            onblur="Matrix.updateField('${col.id}', 'format', this.value)">
+        </td>
         <td class="col-desc">
           <input class="cell-input" type="text" value="${this._esc(col.description || '')}"
             placeholder="What this represents…"
             onblur="Matrix.updateField('${col.id}', 'description', this.value)">
-        </td>
-        <td class="col-notes">
-          <input class="cell-input" type="text" value="${this._esc(col.notes || '')}"
-            placeholder="Examples, constraints…"
-            onblur="Matrix.updateField('${col.id}', 'notes', this.value)">
         </td>
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
@@ -160,14 +208,27 @@ const Matrix = {
     `;
   },
 
+  _formatPlaceholder(dataType) {
+    switch (dataType) {
+      case 'VARCHAR': case 'TEXT': return 'e.g. Value1, Value2, Value3';
+      case 'INT': case 'BIGINT': return 'e.g. 1..1000';
+      case 'DECIMAL': case 'FLOAT': return 'e.g. 0.00..50000.00';
+      case 'DATE': return 'e.g. 2023-01-01..2024-12-31';
+      case 'DATETIME': return 'e.g. 2023-01-01..2024-12-31';
+      case 'BOOLEAN': return 'true, false';
+      default: return 'Example values or range…';
+    }
+  },
+
   _emptyMatrixRow() {
     return `
       <tr class="empty-matrix-row">
-        <td colspan="7">
+        <td colspan="8">
           <div class="empty-matrix">
             <p>No columns yet. Click <strong>+ Add Column</strong> to start describing this event's attributes.</p>
-            <p class="hint-text">Start by adding the key <em>Who</em> (person/org), <em>What</em> (product/item),
-            and <em>When</em> (date/time) dimensions, then add your <em>How many</em> measures.</p>
+            <p class="hint-text">Start with key <em>Who</em> (person/org), <em>What</em> (product/item),
+            and <em>When</em> (date/time) dimensions, then add your <em>How many</em> measures.
+            Mark each as <em>Source System</em> or <em>Derived</em> to track data lineage.</p>
           </div>
         </td>
       </tr>
@@ -183,17 +244,17 @@ const Matrix = {
       id: Storage.generateId(),
       name: '',
       category: 'who',
+      source: 'source_system',
       dataType: 'VARCHAR',
+      format: '',
       description: '',
       notes: ''
     };
     event.columns.push(col);
     Storage.saveEvent(project.id, event);
 
-    // Re-render the view (simplest approach for correctness)
     this.renderEvent(eventId);
 
-    // Focus the new name input
     requestAnimationFrame(() => {
       const rows = document.querySelectorAll('.matrix-row');
       const lastRow = rows[rows.length - 1];
@@ -224,12 +285,32 @@ const Matrix = {
     col.category = newCat;
     Storage.saveEvent(project.id, event);
 
-    // Update dot colour and tooltip
     const cat = CATEGORIES[newCat] || {};
     const dot = row.querySelector('.cat-dot');
     if (dot) dot.style.background = cat.color || '#6b7280';
     const tooltip = document.getElementById(`tooltip-${colId}`);
     if (tooltip) tooltip.textContent = cat.meaning || '';
+  },
+
+  updateSource(colId, newSource, selectEl) {
+    const found = Storage.getEvent(this._getEventIdForCol(colId));
+    if (!found) return;
+    const { event, project } = found;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.source = newSource;
+    Storage.saveEvent(project.id, event);
+
+    // Update select colour class
+    selectEl.className = selectEl.className.replace(/source-select-\w+/, '');
+    selectEl.classList.add(`source-select-${newSource}`);
+
+    // Update source summary chips
+    const summary = document.querySelector('.source-summary');
+    if (summary) {
+      const updated = Storage.getEvent(this._getEventIdForCol(colId));
+      if (updated) summary.outerHTML = this._sourceSummary(updated.event.columns);
+    }
   },
 
   deleteRow(colId) {

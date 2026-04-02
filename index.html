@@ -39,6 +39,15 @@
         <span class="nav-label">Recents</span>
       </a>
 
+      <a class="nav-item" data-section="datagen" data-tip="Sample Data" href="#recents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+          <polyline points="13 2 13 9 20 9"/>
+          <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
+        </svg>
+        <span class="nav-label">Sample Data</span>
+      </a>
+
       <div class="nav-section-label">Help</div>
 
       <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
@@ -91,6 +100,7 @@
 
   <!-- ─── Scripts ──────────────────────────────────────── -->
   <script src="js/storage.js"></script>
+  <script src="js/datagen.js"></script>
   <script src="js/router.js"></script>
   <script src="js/export.js"></script>
   <script src="js/diagram.js"></script>
@@ -98,6 +108,31 @@
   <script src="js/matrix.js"></script>
 
   <script>
+    // ─── Global constants: column origin (source) ─────────
+    const SOURCES = {
+      source_system: {
+        label: 'Source System',
+        description: 'This attribute exists in the operational / transactional source as-is. No transformation logic is required beyond loading it.',
+        formatHint: 'Populate "Format / Examples" with real values from the source to drive sample data generation.',
+        color: '#166534',
+        bg: '#dcfce7'
+      },
+      derived: {
+        label: 'Derived',
+        description: 'This attribute does not exist in the source. It will be calculated, aggregated or enriched in the data transformation layer (ETL/ELT).',
+        formatHint: 'Document the derivation rule in the Description field. Populate "Format / Examples" with a realistic output range.',
+        color: '#9a3412',
+        bg: '#fff7ed'
+      },
+      lookup: {
+        label: 'Lookup',
+        description: 'This attribute is not in the source directly — it is populated by joining to a reference / mapping table during transformation (e.g. fiscal calendar, territory mapping, product hierarchy).',
+        formatHint: 'Name the reference table and key in the Description. Populate "Format / Examples" with typical lookup values.',
+        color: '#1e40af',
+        bg: '#eff6ff'
+      }
+    };
+
     // ─── Global constants: 7W categories ──────────────────
     const CATEGORIES = {
       who: {
@@ -230,6 +265,11 @@
     Router.register('diagram/:id', ({ id }) => {
       const found = Storage.getEvent(id);
       if (found) Diagram.render(found.event);
+      else Router.navigate('projects');
+    });
+    Router.register('datagen/:id', ({ id }) => {
+      const found = Storage.getEvent(id);
+      if (found) DataGen.render(found.event, found.project);
       else Router.navigate('projects');
     });
     Router.register('recents', () => renderRecents());
@@ -394,6 +434,90 @@
           Router.navigate('projects');
         }
       });
+    }
+
+    // ─── Load example project ─────────────────────────────
+    function loadExample() {
+      const existing = Storage.load().projects.find(p => p.name === 'Financial Margin Reporting');
+      if (existing) { Router.navigate(`project/${existing.id}`); return; }
+
+      const id = () => Storage.generateId();
+
+      const project = {
+        id: id(),
+        name: 'Financial Margin Reporting',
+        description: 'Data warehouse model for analysing product sales profitability and gross margin by customer, product, region and channel. Based on the BEAM methodology.',
+        createdAt: new Date().toISOString(),
+        events: [
+
+          // ── Event 1: Product Sale ──────────────────────────
+          {
+            id: id(),
+            name: 'Product Sale',
+            description: 'A product or service is sold to a customer, generating revenue against which cost of goods is measured to derive gross margin.',
+            columns: [
+              // WHO
+              { id: id(), name: 'Customer',         category: 'who',      dataType: 'VARCHAR', source: 'source_system', description: 'The buying customer or account',                        notes: 'From CRM / order management system' },
+              { id: id(), name: 'Account Manager',  category: 'who',      dataType: 'VARCHAR', source: 'source_system', description: 'Internal sales owner responsible for the account',      notes: 'From HR / CRM system' },
+              // WHAT
+              { id: id(), name: 'Product',          category: 'what',     dataType: 'VARCHAR', source: 'source_system', description: 'The product or SKU sold',                               notes: 'From product catalogue / ERP' },
+              { id: id(), name: 'Product Category', category: 'what',     dataType: 'VARCHAR', source: 'source_system', description: 'Product line or category grouping',                     notes: 'e.g. Hardware, Software, Services' },
+              // WHEN
+              { id: id(), name: 'Invoice Date',     category: 'when',     dataType: 'DATE',    source: 'source_system', description: 'Date the invoice was raised',                           notes: 'From billing system' },
+              { id: id(), name: 'Fiscal Period',    category: 'when',     dataType: 'VARCHAR', source: 'derived',       description: 'Fiscal month-year for reporting alignment',              notes: 'Derived from Invoice Date via fiscal calendar lookup — e.g. FY25-Q1' },
+              // WHERE
+              { id: id(), name: 'Sales Region',     category: 'where',    dataType: 'VARCHAR', source: 'source_system', description: 'Geographic sales region',                               notes: 'e.g. EMEA, APAC, Americas — from CRM territory data' },
+              { id: id(), name: 'Business Unit',    category: 'where',    dataType: 'VARCHAR', source: 'source_system', description: 'Internal business unit responsible for the sale',       notes: 'From org hierarchy / ERP' },
+              // HOW
+              { id: id(), name: 'Sales Channel',    category: 'how',      dataType: 'VARCHAR', source: 'source_system', description: 'Route to market for the sale',                         notes: 'Direct, Partner, Online, Reseller' },
+              { id: id(), name: 'Contract Type',    category: 'how',      dataType: 'VARCHAR', source: 'source_system', description: 'Commercial structure of the sale',                     notes: 'Subscription, One-Time, Licence, Professional Services' },
+              // WHY
+              { id: id(), name: 'Discount Reason',  category: 'why',      dataType: 'VARCHAR', source: 'source_system', description: 'Reason a discount was applied, if any',                notes: 'Competitive, Volume, Strategic, Partner; blank if no discount' },
+              { id: id(), name: 'Deal Type',        category: 'why',      dataType: 'VARCHAR', source: 'source_system', description: 'Classification of the commercial motion',              notes: 'New Business, Renewal, Expansion, Upsell' },
+              // HOW MANY
+              { id: id(), name: 'List Price',       category: 'how_many', dataType: 'DECIMAL', source: 'source_system', description: 'Undiscounted published price',                         notes: 'Currency: local; from price book' },
+              { id: id(), name: 'Discount Amount',  category: 'how_many', dataType: 'DECIMAL', source: 'source_system', description: 'Value of discount applied',                            notes: 'Can be zero' },
+              { id: id(), name: 'Net Revenue',      category: 'how_many', dataType: 'DECIMAL', source: 'derived',       description: 'Revenue after discounts (List Price − Discount Amount)', notes: 'Calculated in data layer' },
+              { id: id(), name: 'COGS',             category: 'how_many', dataType: 'DECIMAL', source: 'source_system', description: 'Cost of Goods Sold — direct cost of the product/service delivered', notes: 'From finance / ERP cost ledger' },
+              { id: id(), name: 'Gross Margin',     category: 'how_many', dataType: 'DECIMAL', source: 'derived',       description: 'Net Revenue minus COGS',                               notes: 'Calculated in data layer: Net Revenue − COGS' },
+              { id: id(), name: 'Gross Margin %',   category: 'how_many', dataType: 'DECIMAL', source: 'derived',       description: 'Gross Margin as a percentage of Net Revenue',          notes: 'Calculated: Gross Margin / Net Revenue × 100; null-safe' },
+              { id: id(), name: 'Units Sold',       category: 'how_many', dataType: 'INT',     source: 'source_system', description: 'Number of units or licences sold',                     notes: 'From order line items' },
+            ]
+          },
+
+          // ── Event 2: Cost Allocation ───────────────────────
+          {
+            id: id(),
+            name: 'Cost Allocation',
+            description: 'Periodic allocation of overhead and indirect costs to products and business units, enabling contribution margin analysis beyond direct gross margin.',
+            columns: [
+              // WHO
+              { id: id(), name: 'Cost Centre Owner', category: 'who',     dataType: 'VARCHAR', source: 'source_system', description: 'Person or team responsible for the cost centre',       notes: 'From HR / finance system' },
+              // WHAT
+              { id: id(), name: 'Cost Category',    category: 'what',     dataType: 'VARCHAR', source: 'source_system', description: 'Type of cost being allocated',                         notes: 'e.g. Headcount, Infrastructure, Marketing, R&D' },
+              { id: id(), name: 'Product',          category: 'what',     dataType: 'VARCHAR', source: 'source_system', description: 'Product or service the cost is allocated to',          notes: 'Matches Product dimension from Product Sale event' },
+              // WHEN
+              { id: id(), name: 'Allocation Date',  category: 'when',     dataType: 'DATE',    source: 'source_system', description: 'Date the allocation was posted',                       notes: 'From finance journal entries' },
+              { id: id(), name: 'Fiscal Period',    category: 'when',     dataType: 'VARCHAR', source: 'derived',       description: 'Fiscal month-year the cost falls within',               notes: 'Derived from Allocation Date; aligns with Product Sale fiscal calendar' },
+              // WHERE
+              { id: id(), name: 'Business Unit',    category: 'where',    dataType: 'VARCHAR', source: 'source_system', description: 'Business unit absorbing the cost',                     notes: 'From org hierarchy; matches Product Sale Business Unit dimension' },
+              { id: id(), name: 'Region',           category: 'where',    dataType: 'VARCHAR', source: 'source_system', description: 'Geographic region for regional P&L views',             notes: '' },
+              // HOW
+              { id: id(), name: 'Allocation Method', category: 'how',     dataType: 'VARCHAR', source: 'source_system', description: 'Methodology used to spread the cost',                  notes: 'Revenue%, Headcount%, Equal Split, Direct Charge' },
+              // WHY
+              { id: id(), name: 'Variance Type',    category: 'why',      dataType: 'VARCHAR', source: 'derived',       description: 'Whether this allocation is Budget, Forecast or Actual', notes: 'Derived from source dataset tag; used for Budget vs Actual reporting' },
+              // HOW MANY
+              { id: id(), name: 'Allocated Amount', category: 'how_many', dataType: 'DECIMAL', source: 'source_system', description: 'Cost amount allocated in this entry',                  notes: 'From finance general ledger' },
+              { id: id(), name: 'Contribution Margin', category: 'how_many', dataType: 'DECIMAL', source: 'derived',    description: 'Net Revenue minus COGS minus Allocated Overhead',      notes: 'Calculated in data layer by joining to Product Sale fact' },
+              { id: id(), name: 'Contribution Margin %', category: 'how_many', dataType: 'DECIMAL', source: 'derived',  description: 'Contribution Margin as a percentage of Net Revenue',   notes: 'Calculated: Contribution Margin / Net Revenue × 100' },
+            ]
+          }
+        ]
+      };
+
+      Storage.saveProject(project);
+      showToast('Example project loaded.');
+      Router.navigate(`project/${project.id}`);
     }
 
     // ─── Utility ───────────────────────────────────────────
