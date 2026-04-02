@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modelstorm — BEAM Data Modelling</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ─── Sidebar ─────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">M</div>
+      <div class="sidebar-logo-text">
+        <span class="sidebar-logo-name">Modelstorm</span>
+        <span class="sidebar-logo-sub">BEAM Design Tool</span>
+      </div>
+    </div>
+
+    <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">‹</button>
+
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Workspace</div>
+
+      <a class="nav-item" data-section="projects" data-tip="Projects" href="#projects">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <span class="nav-label">Projects</span>
+      </a>
+
+      <a class="nav-item" data-section="recents" data-tip="Recents" href="#recents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="nav-label">Recents</span>
+      </a>
+
+      <div class="nav-section-label">Help</div>
+
+      <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
+        </svg>
+        <span class="nav-label">BEAM Guide</span>
+      </a>
+    </div>
+
+    <div class="sidebar-bottom">
+      <a class="nav-item" data-section="settings" data-tip="Settings" href="#settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.07 4.93a10 10 0 0 1 1.9 2.87l-2.5 1.44a7 7 0 0 0-1.38-2.08l2-2.23zM4.93 4.93a10 10 0 0 0-1.9 2.87l2.5 1.44A7 7 0 0 1 6.9 7.16L4.93 4.93zM19.07 19.07a10 10 0 0 0 1.9-2.87l-2.5-1.44a7 7 0 0 1-1.38 2.08l2 2.23zM4.93 19.07a10 10 0 0 1-1.9-2.87l2.5-1.44A7 7 0 0 0 6.9 16.84l-1.97 2.23zM12 2v2M12 20v2M2 12h2M20 12h2"/>
+        </svg>
+        <span class="nav-label">Settings</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ─── Main Content ─────────────────────────────────── -->
+  <div id="content">
+    <div class="content-topbar" id="topbar">
+      <!-- Breadcrumb / page title injected by views -->
+    </div>
+    <main id="app">
+      <!-- Views rendered here by JS -->
+    </main>
+  </div>
+
+  <!-- ─── Modal ────────────────────────────────────────── -->
+  <div id="modal-overlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title"></span>
+        <button class="modal-close" onclick="Modal.hide()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="Modal.hide()">Cancel</button>
+        <button class="btn btn-primary" id="modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Toast ─────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <!-- ─── Scripts ──────────────────────────────────────── -->
+  <script src="js/storage.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/diagram.js"></script>
+  <script src="js/projects.js"></script>
+  <script src="js/matrix.js"></script>
+
+  <script>
+    // ─── Global constants: 7W categories ──────────────────
+    const CATEGORIES = {
+      who: {
+        label: 'Who',
+        meaning: 'People or organisations',
+        example: 'Customer, Employee, Supplier',
+        outcome: 'Becomes a dimension table',
+        color: '#3b82f6'
+      },
+      what: {
+        label: 'What',
+        meaning: 'Products, services or items',
+        example: 'Product, SKU, Service',
+        outcome: 'Becomes a dimension table',
+        color: '#10b981'
+      },
+      when: {
+        label: 'When',
+        meaning: 'Time the event occurred',
+        example: 'Sale Date, Order Time',
+        outcome: 'Becomes a Date/Time dimension',
+        color: '#8b5cf6'
+      },
+      where: {
+        label: 'Where',
+        meaning: 'Location of the event',
+        example: 'Store, Region, Channel',
+        outcome: 'Becomes a Location dimension',
+        color: '#f59e0b'
+      },
+      how: {
+        label: 'How',
+        meaning: 'Method or channel used',
+        example: 'Payment Method, Delivery Type',
+        outcome: 'Becomes a Method dimension',
+        color: '#14b8a6'
+      },
+      why: {
+        label: 'Why',
+        meaning: 'Reason or motivation',
+        example: 'Campaign, Promotion, Reason Code',
+        outcome: 'Becomes a Reason dimension',
+        color: '#ec4899'
+      },
+      how_many: {
+        label: 'How many',
+        meaning: 'Measurable quantities or amounts',
+        example: 'Quantity Sold, Revenue, Count',
+        outcome: 'Becomes a fact (measure) in the fact table',
+        color: '#ef4444'
+      }
+    };
+
+    // ─── Modal helper ──────────────────────────────────────
+    const Modal = {
+      _onConfirm: null,
+
+      show({ title, body, confirmLabel = 'Confirm', confirmDanger = false, onConfirm }) {
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-body').innerHTML = body;
+
+        const btn = document.getElementById('modal-confirm');
+        btn.textContent = confirmLabel;
+        btn.className = 'btn ' + (confirmDanger ? 'btn-danger' : 'btn-primary');
+
+        this._onConfirm = onConfirm;
+        document.getElementById('modal-overlay').classList.add('active');
+        document.getElementById('modal').classList.remove('shake');
+
+        // Focus first input
+        requestAnimationFrame(() => {
+          const first = document.querySelector('#modal-body input, #modal-body textarea');
+          if (first) first.focus();
+        });
+      },
+
+      hide() {
+        document.getElementById('modal-overlay').classList.remove('active');
+        this._onConfirm = null;
+      },
+
+      shake() {
+        const m = document.getElementById('modal');
+        m.classList.remove('shake');
+        void m.offsetWidth; // reflow to restart animation
+        m.classList.add('shake');
+      },
+
+      confirm() {
+        if (this._onConfirm) this._onConfirm();
+      }
+    };
+
+    document.getElementById('modal-confirm').addEventListener('click', () => Modal.confirm());
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modal-overlay')) Modal.hide();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') Modal.hide();
+      if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('active')) {
+        // Enter in modal inputs — let form handle naturally; only trigger confirm from explicit button
+      }
+    });
+
+    // ─── Toast helper ──────────────────────────────────────
+    function showToast(message, duration = 2500) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 300ms';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    // ─── Sidebar toggle ────────────────────────────────────
+    const sidebar = document.getElementById('sidebar');
+    document.getElementById('sidebarToggle').addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      document.body.classList.toggle('sidebar-collapsed');
+    });
+
+    // ─── Router setup ──────────────────────────────────────
+    Router.register('projects', () => Projects.renderList());
+    Router.register('project/:id', ({ id }) => Projects.renderProject(id));
+    Router.register('event/:id', ({ id }) => Matrix.renderEvent(id));
+    Router.register('diagram/:id', ({ id }) => {
+      const found = Storage.getEvent(id);
+      if (found) Diagram.render(found.event);
+      else Router.navigate('projects');
+    });
+    Router.register('recents', () => renderRecents());
+    Router.register('guide', () => renderGuide());
+    Router.register('settings', () => renderSettings());
+
+    // ─── Recents view ──────────────────────────────────────
+    function renderRecents() {
+      const data = Storage.load();
+      const allEvents = [];
+      data.projects.forEach(p => p.events.forEach(e => allEvents.push({ event: e, project: p })));
+
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Recent Events</h1>
+            <p class="view-subtitle">All business events across all projects</p>
+          </div>
+        </div>
+        ${allEvents.length === 0
+          ? `<div class="empty-state" style="max-width:500px">
+               <h2 class="empty-title">No events yet</h2>
+               <p class="empty-desc">Create a project and add business events to see them here.</p>
+               <a href="#projects" class="btn btn-primary">Go to Projects</a>
+             </div>`
+          : `<div class="card-grid">
+               ${allEvents.map(({ event, project }) => `
+                 <div class="card event-card" onclick="Router.navigate('event/${event.id}')">
+                   <div class="card-body">
+                     <div style="font-size:11px;color:var(--text-subtle);margin-bottom:4px">${esc(project.name)}</div>
+                     <h3 class="card-title">${esc(event.name)}</h3>
+                     ${event.description ? `<p class="card-desc">${esc(event.description)}</p>` : ''}
+                     <div class="card-meta"><span>${event.columns.length} columns</span></div>
+                   </div>
+                   <div class="card-actions" onclick="event.stopPropagation()">
+                     <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${event.id}')">Edit</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${event.id}')">Diagram</button>
+                   </div>
+                 </div>
+               `).join('')}
+             </div>`
+        }
+      `;
+    }
+
+    // ─── Guide view ────────────────────────────────────────
+    function renderGuide() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">BEAM Methodology Guide</h1>
+            <p class="view-subtitle">Business Event Analysis &amp; Modelling — by Lawrence Corr</p>
+          </div>
+        </div>
+
+        <div class="guide-content" style="max-width:760px">
+          <div class="info-banner">
+            <strong>What is BEAM?</strong> BEAM (Business Event Analysis &amp; Modelling) is an agile
+            approach to data warehouse design from Lawrence Corr's book
+            <em>"Agile Data Warehouse Design"</em>. It uses storytelling — asking who, what, when,
+            where, how, why and how many — to collaboratively discover and model business events,
+            then derives dimensional star schemas directly from those stories.
+          </div>
+
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:12px">The BEAM Process</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px">
+            ${[
+              ['1. Identify events', 'Discover the key things that <em>happen</em> in your business domain. Use nouns: Sale, Shipment, Login, Enrolment, Claim.'],
+              ['2. Tell the event story', 'For each event, answer the 7 Ws. Write them as a sentence: <em>"A <strong>Customer</strong> (Who) buys a <strong>Product</strong> (What) on a <strong>Date</strong> (When) at a <strong>Store</strong> (Where) for a <strong>Price</strong> (How many)."</em>'],
+              ['3. Build the BEAM matrix', 'Translate each 7W answer into a row in the matrix table. Assign a category, data type and description.'],
+              ['4. Derive the star schema', 'Non-measure categories (Who, What, When, Where, How, Why) become <em>dimension tables</em>. Measures (How many) go into the central <em>fact table</em>, along with foreign keys to each dimension.'],
+            ].map(([title, body]) => `
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+                <div style="font-weight:600;margin-bottom:6px;color:var(--primary)">${title}</div>
+                <div style="font-size:13px;color:var(--text-muted);line-height:1.6">${body}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:12px">The 7 Ws in Detail</h2>
+          <div class="ref-grid" style="margin-bottom:28px">
+            ${Object.entries(CATEGORIES).map(([key, cat]) => `
+              <div class="ref-card">
+                <div class="ref-badge" style="background:${cat.color}">${cat.label}</div>
+                <div class="ref-meaning"><strong>${cat.meaning}</strong></div>
+                <div class="ref-example" style="margin:4px 0">e.g. <em>${cat.example}</em></div>
+                <div class="ref-outcome">${cat.outcome}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:12px">Star Schema Output</h2>
+          <div class="info-banner" style="border-left-color:var(--primary);background:#fff7ed;color:#92400e">
+            <strong>Fact table</strong> — named after the event (e.g. <em>Sale Fact</em>). Contains all
+            <strong>How many</strong> measures plus a surrogate key and foreign keys linking to each dimension.<br><br>
+            <strong>Dimension tables</strong> — one per non-measure 7W category (e.g. <em>Customer Dim</em>,
+            <em>Product Dim</em>, <em>Date Dim</em>). Each holds descriptive attributes and a surrogate primary key.<br><br>
+            Use the <strong>View Diagram</strong> button on any event to see the auto-generated star schema.
+          </div>
+
+          <div style="margin-top:24px">
+            <a href="#projects" class="btn btn-primary">Start modelling →</a>
+          </div>
+        </div>
+      `;
+    }
+
+    // ─── Settings view ─────────────────────────────────────
+    function renderSettings() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Settings</h1>
+          </div>
+        </div>
+        <div style="max-width:480px">
+          <div class="export-section">
+            <h3>Data Management</h3>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+              All data is stored in your browser's localStorage. Nothing is sent to a server.
+            </p>
+            <div class="export-actions">
+              <button class="btn btn-ghost btn-sm" onclick="settingsExportAll()">⬇ Export all data (JSON)</button>
+              <button class="btn btn-danger btn-sm" onclick="settingsClearAll()">✕ Clear all data</button>
+            </div>
+          </div>
+
+          <div class="export-section" style="margin-top:12px">
+            <h3>About</h3>
+            <p style="font-size:13px;color:var(--text-muted);line-height:1.7">
+              <strong>Modelstorm</strong> is a browser-based BEAM data modelling tool based on the
+              methodology from <em>Agile Data Warehouse Design</em> by Lawrence Corr.<br><br>
+              No account, no backend, no tracking. Your data stays in your browser.
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
+    function settingsExportAll() {
+      const data = Storage.load();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'modelstorm-backup.json'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function settingsClearAll() {
+      Modal.show({
+        title: 'Clear all data',
+        body: '<p>This will permanently delete <strong>all projects and events</strong>. This cannot be undone.</p>',
+        confirmLabel: 'Clear everything',
+        confirmDanger: true,
+        onConfirm() {
+          localStorage.removeItem('beam_app');
+          Modal.hide();
+          showToast('All data cleared.');
+          Router.navigate('projects');
+        }
+      });
+    }
+
+    // ─── Utility ───────────────────────────────────────────
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ─── Boot ──────────────────────────────────────────────
+    Router.init();
+  </script>
+</body>
+</html>
