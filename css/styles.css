@@ -1462,6 +1462,291 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 .project-picker p { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
 
 /* ─────────────────────────────────────────────
+   Tab bar (Architecture, Responsibility, etc.)
+───────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+}
+.tab-btn {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text); background: var(--surface); }
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────
+   Bus Matrix
+───────────────────────────────────────────── */
+.bus-matrix-wrapper {
+  overflow-x: auto;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.bus-matrix {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 13px;
+  background: var(--bg-card);
+}
+.bus-matrix thead th,
+.bus-matrix tfoot th,
+.bus-matrix tfoot td {
+  background: var(--surface);
+}
+.bus-matrix th,
+.bus-matrix td {
+  border: 1px solid var(--border);
+  padding: 0;
+}
+.bus-corner {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 160px;
+}
+.bus-cat-header {
+  padding: 10px 8px;
+  text-align: center;
+  min-width: 90px;
+}
+.bus-cat-header a { text-decoration: none; }
+.bus-event-header {
+  padding: 8px 14px;
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.bus-cell-td {
+  text-align: center;
+  padding: 6px 4px;
+}
+.bus-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.bus-conformed {
+  color: #4a6cf7;
+  background: #eef2ff;
+}
+.bus-private {
+  color: #9ca3af;
+  background: #f3f4f6;
+}
+.bus-empty {
+  background: transparent;
+}
+.bus-summary-row th,
+.bus-summary-row td {
+  background: var(--surface);
+  font-size: 11px;
+  padding: 6px 4px;
+}
+
+/* ─────────────────────────────────────────────
+   Responsibility Register
+───────────────────────────────────────────── */
+.resp-register-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.resp-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.resp-card-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.resp-card-name { font-weight: 600; font-size: 13px; flex: 1; }
+.resp-card-role { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.resp-card-del {
+  background: none; border: none; cursor: pointer; font-size: 14px;
+  color: var(--text-subtle); padding: 2px 4px; border-radius: 4px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.resp-card:hover .resp-card-del { opacity: 1; }
+.resp-card-del:hover { background: #fee2e2; color: #b91c1c; }
+
+/* Tabs (shared across responsibility, architecture) */
+.tab-bar {
+  display: flex; gap: 4px; border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+}
+.tab-btn {
+  padding: 8px 16px; font-size: 13px; font-weight: 500;
+  border: none; background: none; cursor: pointer;
+  color: var(--text-muted); border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* Accountability matrix */
+.accountability-table {
+  border-collapse: collapse; font-size: 12px; width: 100%;
+}
+.accountability-table th {
+  background: #1c1c28; color: #e0e0f0;
+  padding: 8px 10px; font-weight: 500; font-size: 11px; white-space: nowrap;
+}
+.accountability-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.accountability-table tbody tr:hover td { background: var(--bg-card); }
+.acc-line-name { font-size: 12px; }
+.acc-toggle {
+  width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--bg); cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.acc-toggle:hover { border-color: var(--primary); background: #eff6ff; }
+.acc-assigned { border-color: currentColor; font-weight: 700; }
+
+/* Org cascade */
+.cascade-section {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 4px;
+}
+.cascade-arrow {
+  text-align: center; color: var(--text-subtle); font-size: 18px;
+  margin: 2px 0; line-height: 1;
+}
+
+/* ─────────────────────────────────────────────
+   Bus Architecture Matrix
+───────────────────────────────────────────── */
+.bus-matrix-wrapper { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.bus-matrix { border-collapse: collapse; min-width: 100%; font-size: 12px; }
+.bus-corner { background: #1c1c28; }
+.bus-cat-header {
+  background: #1c1c28; color: #e0e0f0;
+  padding: 8px 12px; text-align: center; font-size: 11px; white-space: nowrap;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.bus-cat-header:hover { opacity: 0.85; }
+.bus-event-header {
+  padding: 8px 12px; font-size: 12px; font-weight: 500;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  white-space: nowrap; cursor: pointer; color: var(--primary);
+}
+.bus-event-header:hover { text-decoration: underline; }
+.bus-cell-td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border); }
+.bus-cell {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; font-size: 14px; font-weight: 700;
+}
+.bus-conformed { background: #dbeafe; color: #1d4ed8; border: 1.5px solid #93c5fd; }
+.bus-private   { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+.bus-empty     { background: transparent; }
+.bus-summary-row th, .bus-summary-row td {
+  background: var(--surface); font-size: 11px; padding: 6px 4px;
+}
+
+/* ─────────────────────────────────────────────
+   ML Analysis
+───────────────────────────────────────────── */
+.ml-pattern-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; position: relative;
+  border-left: 4px solid var(--border);
+}
+.ml-pattern-icon { font-size: 28px; line-height: 1; margin-bottom: 8px; }
+.ml-tag-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  border: 1px solid currentColor;
+}
+.ml-feature-group {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px;
+}
+.ml-feature-group-header {
+  font-size: 12px; font-weight: 600; margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ml-tag-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ml-tag-table th {
+  background: #1c1c28; color: #e0e0f0; padding: 8px 10px;
+  text-align: left; font-size: 11px; font-weight: 500;
+}
+.ml-tag-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.ml-tag-table tbody tr:hover td { background: var(--bg-card); }
+
+/* ─────────────────────────────────────────────
+   DDL Generator
+───────────────────────────────────────────── */
+.ddl-layout {
+  display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start;
+}
+.ddl-left {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; position: sticky; top: 20px;
+}
+.ddl-right {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.ddl-toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.ddl-preview {
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px; line-height: 1.6; color: #e0e0f0;
+  background: #1a1a2e; margin: 0; padding: 16px;
+  overflow-x: auto; white-space: pre; tab-size: 2;
+  min-height: 400px;
+}
+.scd-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 8px; }
+.scd-table th {
+  background: var(--surface); padding: 6px 8px; font-size: 11px;
+  font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.scd-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.scd-table tbody tr:hover td { background: var(--surface); }
+.scd-type-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 8px;
+  font-size: 10px; font-weight: 600; margin-left: 4px;
+}
+
+/* Cash flow reconciliation table */
+.recon-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.recon-table th {
+  background: #1c1c28; color: #e0e0f0; padding: 8px 10px;
+  text-align: left; font-size: 11px; font-weight: 500;
+}
+.recon-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.recon-table tbody tr:hover td { background: var(--bg-card); }
+.recon-status {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────
    Print styles
 ───────────────────────────────────────────── */
 @media print {

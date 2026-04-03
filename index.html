@@ -80,6 +80,38 @@
         <span class="nav-label">Grain Analysis</span>
       </a>
 
+      <a class="nav-item" data-section="responsibility" data-tip="Responsibility" href="#responsibility">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+          <polyline points="16 11 18 13 22 9"/>
+        </svg>
+        <span class="nav-label">Responsibility</span>
+      </a>
+
+      <a class="nav-item" data-section="architecture" data-tip="Architecture" href="#architecture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+          <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
+          <line x1="5" y1="19" x2="19" y2="19"/>
+        </svg>
+        <span class="nav-label">Architecture</span>
+      </a>
+
+      <a class="nav-item" data-section="cashflow" data-tip="Cash Flow" href="#cashflow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M2 16s3-2 6-2 6 4 9 4 6-2 6-2V4s-3 2-6 2-6-4-9-4-6 2-6 2z"/>
+        </svg>
+        <span class="nav-label">Cash Flow</span>
+      </a>
+
+      <a class="nav-item" data-section="ml-opportunities" data-tip="ML Opportunities" href="#ml-opportunities">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        <span class="nav-label">ML Opportunities</span>
+      </a>
+
       <div class="nav-section-label">Help</div>
 
       <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
@@ -142,6 +174,11 @@
   <script src="js/plmapper.js"></script>
   <script src="js/grainanalysis.js"></script>
   <script src="js/businessareas.js"></script>
+  <script src="js/responsibility.js"></script>
+  <script src="js/architecture.js"></script>
+  <script src="js/cashflow.js"></script>
+  <script src="js/mlanalysis.js"></script>
+  <script src="js/ddlgen.js"></script>
 
   <script>
     // ─── Global constants: event grain levels ─────────────
@@ -205,6 +242,63 @@
       { id: 'interest',      parentId: null,  name: 'Interest & Finance Costs',      type: 'line',    sign: -1, order: 7 },
       { id: 'ebit',          parentId: null,  name: 'Operating Profit / EBIT',       type: 'derived', sign:  1, order: 8 }
     ];
+
+    // ─── Global constants: cash flow statement lines ───────
+    const DEFAULT_CASHFLOW_LINES = [
+      { id: 'cf_op',    parentId: null,    name: 'Operating Activities',       type: 'section', order: 1 },
+      { id: 'cf_ebit',  parentId: 'cf_op', name: 'Operating Profit / EBIT',   type: 'line',    sign:  1, order: 2 },
+      { id: 'cf_da',    parentId: 'cf_op', name: 'Add back: D&A',             type: 'line',    sign:  1, order: 3 },
+      { id: 'cf_wc',    parentId: 'cf_op', name: 'Working Capital Movement',  type: 'section', order: 4 },
+      { id: 'cf_rec',   parentId: 'cf_wc', name: 'Change in Receivables',     type: 'line',    sign: -1, order: 5 },
+      { id: 'cf_pay',   parentId: 'cf_wc', name: 'Change in Payables',        type: 'line',    sign:  1, order: 6 },
+      { id: 'cf_inv',   parentId: 'cf_wc', name: 'Change in Inventory',       type: 'line',    sign: -1, order: 7 },
+      { id: 'cf_ocf',   parentId: 'cf_op', name: 'Operating Cash Flow',       type: 'derived', sign:  1, order: 8 },
+      { id: 'cf_ix',    parentId: null,    name: 'Investing Activities',       type: 'section', order: 9 },
+      { id: 'cf_capex', parentId: 'cf_ix', name: 'Capital Expenditure',       type: 'line',    sign: -1, order: 10 },
+      { id: 'cf_disp',  parentId: 'cf_ix', name: 'Proceeds from Disposals',   type: 'line',    sign:  1, order: 11 },
+      { id: 'cf_icf',   parentId: 'cf_ix', name: 'Investing Cash Flow',       type: 'derived', sign:  1, order: 12 },
+      { id: 'cf_fn',    parentId: null,    name: 'Financing Activities',       type: 'section', order: 13 },
+      { id: 'cf_debt',  parentId: 'cf_fn', name: 'Debt Repayment',            type: 'line',    sign: -1, order: 14 },
+      { id: 'cf_div',   parentId: 'cf_fn', name: 'Dividends Paid',            type: 'line',    sign: -1, order: 15 },
+      { id: 'cf_eq',    parentId: 'cf_fn', name: 'Equity / New Borrowing',    type: 'line',    sign:  1, order: 16 },
+      { id: 'cf_fcf',   parentId: 'cf_fn', name: 'Financing Cash Flow',       type: 'derived', sign:  1, order: 17 },
+      { id: 'cf_net',   parentId: null,    name: 'Net Cash Movement',         type: 'derived', sign:  1, order: 18 }
+    ];
+
+    // ─── Global constants: ML tags and patterns ────────────
+    const ML_TAGS = {
+      none:                  { label: 'Not applicable',       color: '#6b7280',  short: '—' },
+      forecast_target:       { label: 'Forecast Target',      color: '#7c3aed',  short: 'FCT', description: 'Predict future values of this measure' },
+      classification_target: { label: 'Classification Target',color: '#dc2626',  short: 'CLF', description: 'Predict a category or binary outcome' },
+      regression_feature:    { label: 'Regression Feature',   color: '#2563eb',  short: 'FTR', description: 'Input variable for a predictive model' },
+      clustering_dimension:  { label: 'Clustering Dimension', color: '#059669',  short: 'CLU', description: 'Use to segment or group entities' },
+      anomaly_signal:        { label: 'Anomaly Signal',       color: '#d97706',  short: 'ANM', description: 'Monitor for unusual values or outliers' },
+      identifier:            { label: 'Identifier (exclude)', color: '#9ca3af',  short: 'ID',  description: 'Key or ID — not a model input' }
+    };
+
+    const ML_PATTERNS = [
+      { id: 'time_series',   name: 'Time Series Forecasting',       icon: '📈', color: '#7c3aed',
+        description: 'Semi-additive measures with a time (When) dimension are strong candidates for time-series forecasting. Use to predict future values of balances, headcount, or inventory.' },
+      { id: 'churn',         name: 'Churn / Retention Prediction',  icon: '🔄', color: '#dc2626',
+        description: 'Events with a Who dimension and multiple measures enable churn and retention models. Track engagement patterns to predict which customers are at risk.' },
+      { id: 'recommendation',name: 'Recommendation Engine',         icon: '🎯', color: '#2563eb',
+        description: 'Events with Who, What, and a quantity measure (e.g. purchase, view, rating) enable collaborative filtering and personalised recommendations.' },
+      { id: 'anomaly',       name: 'Anomaly Detection',             icon: '⚠️', color: '#d97706',
+        description: 'Non-additive measures with budget control flags are ideal for variance anomaly detection — flagging unusual spend, revenue dips, or ratio outliers.' },
+      { id: 'segmentation',  name: 'Customer Segmentation',         icon: '👥', color: '#059669',
+        description: 'Multiple measures on a Who dimension enable unsupervised clustering — group customers by behaviour, value, or spend patterns.' },
+      { id: 'demand',        name: 'Demand Forecasting',            icon: '📦', color: '#0891b2',
+        description: 'Transaction-grain events with a What (product) dimension and quantity measures enable SKU-level demand forecasting and replenishment optimisation.' }
+    ];
+
+    // ─── Global constants: SCD types ──────────────────────
+    const SCD_TYPES = {
+      0: { label: 'Type 0 — Fixed',   short: 'SCD0', description: 'Never changes — always retain original value',                                        color: '#6b7280' },
+      1: { label: 'Type 1 — Overwrite',short:'SCD1', description: 'Overwrite with new value — no history retained',                                      color: '#2563eb' },
+      2: { label: 'Type 2 — History', short: 'SCD2', description: 'Insert new row per change with effective_from / effective_to / is_current — full history', color: '#7c3aed' },
+      3: { label: 'Type 3 — Previous',short: 'SCD3', description: 'Add a "previous_value" column — one prior version retained',                         color: '#059669' },
+      6: { label: 'Type 6 — Hybrid',  short: 'SCD6', description: 'Combines Type 1 + 2 + 3: current value overwritten + history rows + previous column', color: '#d97706' }
+    };
 
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
@@ -523,6 +617,17 @@
     Router.register('business-areas/:id', ({ id }) => BusinessAreas.render(id));
     Router.register('grain-analysis', ()       => GrainAnalysis.renderProjectPicker());
     Router.register('grain-analysis/:id', ({ id }) => GrainAnalysis.render(id));
+    Router.register('architecture',           ()       => Architecture.renderProjectPicker());
+    Router.register('architecture/:id',       ({ id }) => Architecture.render(id));
+    Router.register('responsibility',         ()       => Responsibility.renderProjectPicker());
+    Router.register('responsibility/:id',     ({ id }) => Responsibility.render(id));
+    Router.register('responsibility-gaps/:id',({ id }) => Responsibility.renderGaps(id));
+    Router.register('cashflow',               ()       => CashFlow.renderProjectPicker());
+    Router.register('cashflow/:id',           ({ id }) => CashFlow.render(id));
+    Router.register('cashflow-coverage/:id',  ({ id }) => CashFlow.renderCoverage(id));
+    Router.register('ml-opportunities',       ()       => MLAnalysis.renderProjectPicker());
+    Router.register('ml-opportunities/:id',   ({ id }) => MLAnalysis.render(id));
+    Router.register('ddl/:id',                ({ id }) => DDLGen.render(id));
     Router.register('recents',  () => renderRecents());
     Router.register('guide',    () => renderGuide());
     Router.register('settings', () => renderSettings());
@@ -766,7 +871,26 @@
         ]
       };
 
-      Storage.saveProject(project);
+      // Apply migration so all new fields get defaults
+      const migrated = Storage.load().projects.find(p => p.id === project.id);
+      // Also set additivity for known non-additive/semi-additive measures
+      if (migrated) {
+        migrated.events.forEach(e => {
+          e.grain = e.name === 'Cost Allocation' ? 'monthly' : 'transaction';
+          e.columns.forEach(col => {
+            if (col.name.includes('%')) { col.additiveType = 'non_additive'; }
+            else if (['Gross Margin', 'Contribution Margin', 'Net Revenue'].includes(col.name) && col.source === 'derived') { col.additiveType = 'fully_additive'; col.formula = col.name === 'Net Revenue' ? '= List Price - Discount Amount' : col.name === 'Gross Margin' ? '= Net Revenue - COGS' : '= Net Revenue - COGS - Allocated Amount'; }
+            if (col.name.includes('%')) { col.plLineId = col.name.includes('Gross') ? 'gross_margin' : ''; }
+            if (col.name === 'Net Revenue') col.plLineId = 'rev_net';
+            if (col.name === 'COGS') col.plLineId = 'cos_materials';
+            if (col.name === 'Gross Margin' && e.name === 'Product Sale') col.plLineId = 'gross_margin';
+            if (col.name === 'Discount Amount') col.plLineId = 'rev_discount';
+            if (col.name === 'List Price') col.plLineId = 'rev_gross';
+            if (col.name === 'Allocated Amount') col.plLineId = 'opex_ga';
+          });
+        });
+        Storage.saveProject(migrated);
+      }
       showToast('Example project loaded.');
       Router.navigate(`project/${project.id}`);
     }

@@ -21,9 +21,9 @@ const Export = {
     const headers = [
       'Column Name', 'Category', 'Category Label', '7W Meaning',
       'Origin', 'Origin Label', 'Data Type', 'Format / Examples',
-      'Additivity', 'Budget Control', 'Responsibility Type',
-      'P&L Line', 'Conformed Dimension',
-      'Description', 'Notes'
+      'Additivity', 'Budget Control', 'Owner', 'Responsibility Type', 'SCD Type',
+      'P&L Line', 'Cash Flow Line', 'ML Tag', 'Conformed Dimension',
+      'Formula', 'Description', 'Notes'
     ];
     const rows = event.columns.map(col => [
       col.name,
@@ -36,9 +36,14 @@ const Export = {
       col.format || '',
       col.category === 'how_many' ? (ADDITIVE_TYPES?.[col.additiveType || 'fully_additive']?.label || col.additiveType || '') : '',
       col.category === 'how_many' ? (col.budgetControl ? 'Yes' : 'No') : '',
+      col.ownerId || '',
       col.category !== 'how_many' ? (RESPONSIBILITY_TYPES?.[col.responsibilityType || 'none']?.label || col.responsibilityType || '') : '',
+      col.scdType !== null && col.scdType !== undefined ? `SCD${col.scdType}` : '',
       col.plLineId || '',
+      col.cashFlowLineId || '',
+      ML_TAGS?.[col.mlTag || 'none']?.label || col.mlTag || '',
       col.isConformed ? (col.publicDimensionId || 'Yes') : 'No',
+      col.formula || '',
       col.description || '',
       col.notes || ''
     ]);

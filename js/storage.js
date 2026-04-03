@@ -30,7 +30,9 @@ const Storage = {
     data.projects = (data.projects || []).map(p => {
       // Project-level new fields
       if (!p.businessAreas) p.businessAreas = [];
-      if (!p.plLines) p.plLines = null; // null = use DEFAULT_PL_LINES
+      if (!p.plLines) p.plLines = null;
+      // Phase 3: responsibility register
+      if (!p.responsibilityRegister) p.responsibilityRegister = [];
 
       p.events = (p.events || []).map(e => {
         // Event-level new fields
@@ -38,16 +40,24 @@ const Storage = {
         if (!e.businessAreaIds) e.businessAreaIds = [];
 
         e.columns = (e.columns || []).map(col => {
-          // Column-level new fields for how_many
+          // Phase 2: additivity, budget, responsibility, conformed dims
           if (!col.additiveType) col.additiveType = 'fully_additive';
           if (col.requiredGrain === undefined) col.requiredGrain = null;
           if (!col.formula) col.formula = '';
           if (col.budgetControl === undefined) col.budgetControl = false;
           if (!col.plLineId) col.plLineId = '';
-          // Column-level new fields for dimension columns
           if (!col.responsibilityType) col.responsibilityType = 'none';
           if (!col.publicDimensionId) col.publicDimensionId = '';
           if (col.isConformed === undefined) col.isConformed = false;
+          if (!col.notes) col.notes = '';
+          // Phase 3: responsibility owner, cash flow, ML tag, SCD
+          if (!col.ownerId) col.ownerId = '';
+          if (!col.cashFlowLineId) col.cashFlowLineId = '';
+          if (col.isCashBased === undefined) col.isCashBased = false;
+          if (!col.mlTag) col.mlTag = 'none';
+          if (col.scdType === undefined) col.scdType = null;
+          if (col.isNaturalKey === undefined) col.isNaturalKey = false;
+          if (col.isSurrogateKey === undefined) col.isSurrogateKey = false;
           return col;
         });
         return e;
@@ -167,5 +177,38 @@ const Storage = {
       });
     });
     return assigned;
+  },
+
+  // ── Responsibility register helpers ───────────────────────
+
+  addResponsibleParty(projectId, name, role, color, responsibilityType) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return null;
+    const person = { id: this.generateId(), name, role: role || '', color: color || '#4a6cf7', responsibilityType: responsibilityType || 'none' };
+    if (!project.responsibilityRegister) project.responsibilityRegister = [];
+    project.responsibilityRegister.push(person);
+    this.save(data);
+    return person;
+  },
+
+  deleteResponsibleParty(projectId, personId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    project.responsibilityRegister = (project.responsibilityRegister || []).filter(p => p.id !== personId);
+    // Remove ownerId from all columns that referenced this person
+    (project.events || []).forEach(e => {
+      (e.columns || []).forEach(col => { if (col.ownerId === personId) col.ownerId = ''; });
+    });
+    this.save(data);
+  },
+
+  // ── Cash flow line helpers ────────────────────────────────
+
+  getCashFlowLines(projectId) {
+    const project = this.getProject(projectId);
+    if (!project) return [];
+    return project.cashFlowLines || (typeof DEFAULT_CASHFLOW_LINES !== 'undefined' ? DEFAULT_CASHFLOW_LINES : []);
   }
 };

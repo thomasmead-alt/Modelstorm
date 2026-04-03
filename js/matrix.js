@@ -51,6 +51,7 @@ const Matrix = {
         <div class="matrix-toolbar-right">
           <button class="btn btn-ghost btn-sm" onclick="Export.eventToCSV(Storage.getEvent('${event.id}').event)">⬇ CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="Export.printEvent(Storage.getEvent('${event.id}').event, '${this._esc(project.name)}')">🖨 Print</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('ddl/${event.id}')">⚙ DDL</button>
         </div>
       </div>
 
@@ -91,7 +92,7 @@ const Matrix = {
             </tr>
           </thead>
           <tbody id="matrixBody">
-            ${event.columns.length === 0 ? this._emptyMatrixRow() : event.columns.map((col, i) => this._row(col, i)).join('')}
+            ${event.columns.length === 0 ? this._emptyMatrixRow() : event.columns.map((col, i) => this._row(col, i, project)).join('')}
           </tbody>
         </table>
       </div>
@@ -147,7 +148,7 @@ const Matrix = {
     return `<div class="source-summary">${chips}</div>`;
   },
 
-  _row(col, index) {
+  _row(col, index, project) {
     const catOptions = Object.entries(CATEGORIES).map(([key, c]) =>
       `<option value="${key}" ${col.category === key ? 'selected' : ''} style="color:${c.color}">${c.label} — ${c.meaning}</option>`
     ).join('');
@@ -190,7 +191,7 @@ const Matrix = {
           </select>
         </td>
         <td class="col-classify">
-          ${this._classifyCell(col)}
+          ${this._classifyCell(col, project)}
         </td>
         <td class="col-type">
           <select class="cell-select"
@@ -212,9 +213,38 @@ const Matrix = {
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
             onclick="Matrix.deleteRow('${col.id}')">✕</button>
+          <button class="btn-icon" title="${col.notes || col.formula ? 'Has notes' : 'Add notes'}"
+            style="font-size:11px;opacity:${col.notes || col.formula ? '1' : '0.4'};color:${col.notes || col.formula ? 'var(--primary)' : 'inherit'}"
+            onclick="Matrix._toggleNotes('${col.id}')">✎</button>
         </td>
       </tr>
+      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula ? 'table-row' : 'none'}">
+        <td colspan="2"></td>
+        <td colspan="6" style="padding:4px 8px 8px">
+          <div style="display:flex;gap:8px">
+            <div style="flex:1">
+              <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">NOTES</div>
+              <textarea class="cell-input" rows="2" style="width:100%;resize:vertical;font-size:12px"
+                placeholder="Additional context, data quality notes, known issues…"
+                onblur="Matrix.updateField('${col.id}', 'notes', this.value)">${this._esc(col.notes || '')}</textarea>
+            </div>
+            ${col.source === 'derived' ? `
+            <div style="flex:1">
+              <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">FORMULA / DERIVATION</div>
+              <textarea class="cell-input" rows="2" style="width:100%;resize:vertical;font-size:12px;font-family:monospace"
+                placeholder="= source_column * factor  or  CASE WHEN … END"
+                onblur="Matrix.updateField('${col.id}', 'formula', this.value)">${this._esc(col.formula || '')}</textarea>
+            </div>` : ''}
+          </div>
+        </td>
+        <td colspan="2"></td>
+      </tr>
     `;
+  },
+
+  _toggleNotes(colId) {
+    const row = document.getElementById(`notes-${colId}`);
+    if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
   },
 
   _formatPlaceholder(dataType) {
@@ -316,7 +346,7 @@ const Matrix = {
     `;
   },
 
-  _classifyCell(col) {
+  _classifyCell(col, project) {
     if (col.category === 'how_many') {
       const at = col.additiveType || 'fully_additive';
       const atInfo = (typeof ADDITIVE_TYPES !== 'undefined' && ADDITIVE_TYPES[at]) || { short: at, label: at };
@@ -325,18 +355,30 @@ const Matrix = {
             `<option value="${k}" ${at === k ? 'selected' : ''}>${a.label}</option>`).join('')
         : '';
       const bcChecked = col.budgetControl ? 'checked' : '';
-      const shortClass = { fully_additive: 'fa', semi_additive: 'sa', non_additive: 'na' }[at] || 'fa';
+      // Owner picker from responsibility register
+      const register = (project && project.responsibilityRegister) || [];
+      const ownerOpts = register.map(p =>
+        `<option value="${p.id}" ${col.ownerId === p.id ? 'selected' : ''}>${this._esc(p.name)}</option>`
+      ).join('');
+      const ownerPicker = register.length ? `
+        <select class="cell-select" style="font-size:11px;padding:2px 4px;margin-top:3px"
+          title="Responsible party for this measure"
+          onchange="Matrix.updateField('${col.id}', 'ownerId', this.value)">
+          <option value="">— Owner —</option>
+          ${ownerOpts}
+        </select>` : '';
       return `<div class="classify-cell">
         <select class="cell-select" style="font-size:11px;padding:2px 4px"
           onchange="Matrix.updateField('${col.id}', 'additiveType', this.value); Matrix.renderEvent(Matrix._getEventIdForCol('${col.id}'))"
           title="${atInfo.description || ''}">
           ${atOpts}
         </select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer" title="Mark as budget-controlled measure">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer;margin-top:3px" title="Mark as budget-controlled measure">
           <input type="checkbox" ${bcChecked}
             onchange="Matrix.updateField('${col.id}', 'budgetControl', this.checked)">
-          💰 Budget control
+          💰 Budget ctrl
         </label>
+        ${ownerPicker}
       </div>`;
     } else {
       const rt = col.responsibilityType || 'none';
@@ -345,12 +387,23 @@ const Matrix = {
         ? Object.entries(RESPONSIBILITY_TYPES).map(([k, r]) =>
             `<option value="${k}" ${rt === k ? 'selected' : ''}>${r.label}</option>`).join('')
         : '';
+      const scdType = col.scdType;
+      const scdOpts = typeof SCD_TYPES !== 'undefined'
+        ? `<option value="">— SCD —</option>` + Object.entries(SCD_TYPES).map(([k, s]) =>
+            `<option value="${k}" ${scdType == k ? 'selected' : ''}>${s.short}</option>`).join('')
+        : '';
       return `<div class="classify-cell">
         <select class="cell-select" style="font-size:11px;padding:2px 4px"
           onchange="Matrix.updateField('${col.id}', 'responsibilityType', this.value)"
           title="${rtInfo.description || ''}">
           ${rtOpts}
         </select>
+        ${typeof SCD_TYPES !== 'undefined' ? `
+        <select class="cell-select" style="font-size:11px;padding:2px 4px;margin-top:3px"
+          title="Slowly Changing Dimension type"
+          onchange="Matrix.updateField('${col.id}', 'scdType', this.value===''?null:parseInt(this.value))">
+          ${scdOpts}
+        </select>` : ''}
       </div>`;
     }
   },
