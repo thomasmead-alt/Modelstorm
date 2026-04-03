@@ -20,15 +20,21 @@ const Diagram = {
     const dimEntries = Object.entries(byCategory).filter(([cat]) => cat !== 'how_many');
 
     // --- Build fact table rows ---
+    const grain = event.grain || 'transaction';
+    const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, short: 'TXN', color: '#6b7280' };
     const factLabel = `${event.name} Fact`;
     const factRows = [];
     factRows.push({ text: 'event_key (PK)', key: true });
+    factRows.push({ text: `Grain: ${grainInfo.label}`, grain: true, color: grainInfo.color });
     dimEntries.forEach(([cat]) => {
       const label = CATEGORIES[cat]?.label || cat;
       factRows.push({ text: `${cat}_key (FK → ${label} Dim)`, fk: true });
     });
     measures.forEach(m => {
-      factRows.push({ text: `${m.name} [${m.dataType}]`, measure: true });
+      const at = m.additiveType || 'fully_additive';
+      const atInfo = (typeof ADDITIVE_TYPES !== 'undefined' && ADDITIVE_TYPES[at]) || { short: 'FA', color: '#166534' };
+      const bcFlag = m.budgetControl ? ' 💰' : '';
+      factRows.push({ text: `${m.name} [${m.dataType}]${bcFlag}`, measure: true, additiveShort: atInfo.short, additiveColor: atInfo.color });
     });
 
     // --- SVG canvas size ---
@@ -93,6 +99,10 @@ const Diagram = {
         <div class="legend-item"><span class="legend-swatch fact-swatch"></span> Fact table (measures + foreign keys)</div>
         <div class="legend-item"><span class="legend-swatch dim-swatch"></span> Dimension table (descriptive context)</div>
         <div class="legend-item"><span class="legend-line"></span> Foreign key relationship</div>
+        <div class="legend-item"><span class="additive-badge additive-fa">FA</span> Fully Additive — safe to SUM at any grain</div>
+        <div class="legend-item"><span class="additive-badge additive-sa">SA</span> Semi-Additive — cannot SUM across time</div>
+        <div class="legend-item"><span class="additive-badge additive-na">NA</span> Non-Additive — must recalculate from components</div>
+        <div class="legend-item"><span style="font-size:13px">💰</span> Budget-controlled measure</div>
       </div>
     `;
 
@@ -237,14 +247,26 @@ const Diagram = {
       // Row icon / colour indicator
       let rowFill = '#374151';
       let prefix = '';
+      let rowBgOverride = null;
       if (isFact && factRows) {
         const fr = factRows[i];
-        if (fr?.key) { rowFill = '#6b7280'; prefix = '🔑 '; }
-        else if (fr?.fk) { rowFill = '#4a6cf7'; prefix = '🔗 '; }
-        else if (fr?.measure) { rowFill = '#e85d04'; prefix = '# '; }
+        if (fr?.key)   { rowFill = '#6b7280'; prefix = '🔑 '; }
+        else if (fr?.grain) { rowFill = fr.color || '#6b7280'; prefix = '⊕ '; rowBgOverride = `${fr.color}15`; }
+        else if (fr?.fk)   { rowFill = '#4a6cf7'; prefix = '🔗 '; }
+        else if (fr?.measure) {
+          rowFill = fr.additiveColor || '#e85d04';
+          prefix = `[${fr.additiveShort || 'FA'}] `;
+        }
       } else if (i === 0) {
-        rowFill = '#6b7280'; // PK row
-        prefix = '🔑 ';
+        rowFill = '#6b7280'; prefix = '🔑 ';
+      }
+
+      if (rowBgOverride) {
+        const overrideBg = this._svgEl('rect', {
+          x: x + 1, y: y + headerH + this.BOX_PADDING / 2 + i * this.BOX_ROW_H,
+          width: w - 2, height: this.BOX_ROW_H, fill: rowBgOverride
+        });
+        g.appendChild(overrideBg);
       }
 
       const txt = this._svgEl('text', {

@@ -48,6 +48,38 @@
         <span class="nav-label">Sample Data</span>
       </a>
 
+      <div class="nav-section-label">Analysis</div>
+
+      <a class="nav-item" data-section="dimensions" data-tip="Dimension Library" href="#dimensions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+        <span class="nav-label">Dimensions</span>
+      </a>
+
+      <a class="nav-item" data-section="pl-mapper" data-tip="P&amp;L Mapper" href="#pl-mapper">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        <span class="nav-label">P&amp;L Mapper</span>
+      </a>
+
+      <a class="nav-item" data-section="business-areas" data-tip="Business Areas" href="#business-areas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+          <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+        </svg>
+        <span class="nav-label">Business Areas</span>
+      </a>
+
+      <a class="nav-item" data-section="grain-analysis" data-tip="Grain Analysis" href="#grain-analysis">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span class="nav-label">Grain Analysis</span>
+      </a>
+
       <div class="nav-section-label">Help</div>
 
       <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
@@ -106,8 +138,218 @@
   <script src="js/diagram.js"></script>
   <script src="js/projects.js"></script>
   <script src="js/matrix.js"></script>
+  <script src="js/dimensions.js"></script>
+  <script src="js/plmapper.js"></script>
+  <script src="js/grainanalysis.js"></script>
+  <script src="js/businessareas.js"></script>
 
   <script>
+    // ─── Global constants: event grain levels ─────────────
+    const GRAINS = {
+      transaction: { label: 'Transaction', short: 'TXN', description: 'Each individual record — finest grain', color: '#6b7280', bg: '#f9fafb' },
+      daily:       { label: 'Daily',       short: 'DAY', description: 'Aggregated to one row per day', color: '#3b82f6', bg: '#eff6ff' },
+      weekly:      { label: 'Weekly',      short: 'WK',  description: 'Aggregated to one row per week', color: '#8b5cf6', bg: '#f5f3ff' },
+      monthly:     { label: 'Monthly',     short: 'MTH', description: 'Aggregated to one row per fiscal period/month', color: '#f59e0b', bg: '#fffbeb' },
+      quarterly:   { label: 'Quarterly',   short: 'QTR', description: 'Aggregated to one row per quarter', color: '#10b981', bg: '#ecfdf5' },
+      annual:      { label: 'Annual',      short: 'YR',  description: 'Aggregated to one row per financial year', color: '#e85d04', bg: '#fff7ed' }
+    };
+
+    // ─── Global constants: measure additivity types ────────
+    const ADDITIVE_TYPES = {
+      fully_additive: {
+        label: 'Fully Additive', short: 'FA',
+        description: 'Can be SUMmed correctly at any grain across all dimensions. e.g. Revenue, Cost, Quantity Sold.',
+        grain_note: 'No grain restriction — can be aggregated freely.',
+        color: '#166534', bg: '#dcfce7'
+      },
+      semi_additive: {
+        label: 'Semi-Additive', short: 'SA',
+        description: 'Can be SUMmed across non-time dimensions but NOT summed across time. Requires LAST, AVG, or snapshot logic over time. e.g. Account Balance, Headcount, Inventory Level.',
+        grain_note: 'Requires a specific time grain for time-based analysis.',
+        color: '#92400e', bg: '#fef3c7'
+      },
+      non_additive: {
+        label: 'Non-Additive', short: 'NA',
+        description: 'Cannot be SUMmed at any grain — must be recalculated from component measures. e.g. Gross Margin %, Debtor Days, Inventory Days Cover, Average Order Value.',
+        grain_note: 'Requires grain + all component measures to be available before calculating.',
+        color: '#991b1b', bg: '#fee2e2'
+      }
+    };
+
+    // ─── Global constants: responsibility types ────────────
+    const RESPONSIBILITY_TYPES = {
+      none:          { label: '—',              description: 'No special responsibility role', color: '#9ca3af' },
+      cost_centre:   { label: 'Cost Centre',    description: 'Organisational unit that incurs costs and holds budget authority', color: '#7c3aed' },
+      profit_centre: { label: 'Profit Centre',  description: 'Business unit or product line with P&L ownership', color: '#0891b2' },
+      budget_holder: { label: 'Budget Holder',  description: 'Person or role responsible for approving and controlling spend against a budget', color: '#059669' },
+      org_hierarchy: { label: 'Org Hierarchy',  description: 'Part of an organisational tree — has parent/child relationships with other members', color: '#d97706' }
+    };
+
+    // ─── Global constants: default P&L line structure ──────
+    const DEFAULT_PL_LINES = [
+      { id: 'rev',           parentId: null,  name: 'Revenue',                       type: 'section', sign:  1, order: 1 },
+      { id: 'rev_gross',     parentId: 'rev', name: 'Gross Revenue',                 type: 'line',    sign:  1, order: 1 },
+      { id: 'rev_discount',  parentId: 'rev', name: 'Discounts & Deductions',        type: 'line',    sign: -1, order: 2 },
+      { id: 'rev_net',       parentId: 'rev', name: 'Net Revenue',                   type: 'derived', sign:  1, order: 3 },
+      { id: 'cos',           parentId: null,  name: 'Cost of Sales',                 type: 'section', sign: -1, order: 2 },
+      { id: 'cos_materials', parentId: 'cos', name: 'Direct Materials',              type: 'line',    sign: -1, order: 1 },
+      { id: 'cos_labour',    parentId: 'cos', name: 'Direct Labour',                 type: 'line',    sign: -1, order: 2 },
+      { id: 'cos_other',     parentId: 'cos', name: 'Other Direct Costs',            type: 'line',    sign: -1, order: 3 },
+      { id: 'gross_margin',  parentId: null,  name: 'Gross Margin',                  type: 'derived', sign:  1, order: 3 },
+      { id: 'opex',          parentId: null,  name: 'Operating Expenses',            type: 'section', sign: -1, order: 4 },
+      { id: 'opex_sales',    parentId: 'opex', name: 'Sales & Marketing',            type: 'line',    sign: -1, order: 1 },
+      { id: 'opex_ga',       parentId: 'opex', name: 'General & Administrative',     type: 'line',    sign: -1, order: 2 },
+      { id: 'opex_rd',       parentId: 'opex', name: 'Research & Development',       type: 'line',    sign: -1, order: 3 },
+      { id: 'ebitda',        parentId: null,  name: 'EBITDA',                        type: 'derived', sign:  1, order: 5 },
+      { id: 'da',            parentId: null,  name: 'Depreciation & Amortisation',   type: 'line',    sign: -1, order: 6 },
+      { id: 'interest',      parentId: null,  name: 'Interest & Finance Costs',      type: 'line',    sign: -1, order: 7 },
+      { id: 'ebit',          parentId: null,  name: 'Operating Profit / EBIT',       type: 'derived', sign:  1, order: 8 }
+    ];
+
+    // ─── Global constants: public dimension templates ──────
+    const DEFAULT_PUBLIC_DIMENSIONS = [
+      {
+        id: 'dim_date', name: 'Date / Fiscal Calendar', category: 'when', icon: '📅',
+        description: 'Standard date dimension with fiscal calendar attributes. Enables time-based analysis, period comparison, and fiscal reporting.',
+        columns: [
+          { name: 'date_key',        dataType: 'INT',     description: 'Surrogate key (YYYYMMDD integer)',   isKey: true,  responsibilityType: 'none' },
+          { name: 'date',            dataType: 'DATE',    description: 'Calendar date',                       isKey: false, responsibilityType: 'none' },
+          { name: 'day_of_week',     dataType: 'VARCHAR', description: 'Day name (Monday–Sunday)',            isKey: false, responsibilityType: 'none' },
+          { name: 'week_number',     dataType: 'INT',     description: 'ISO week number (1–53)',              isKey: false, responsibilityType: 'none' },
+          { name: 'month_name',      dataType: 'VARCHAR', description: 'Month name (January–December)',      isKey: false, responsibilityType: 'none' },
+          { name: 'month_number',    dataType: 'INT',     description: 'Month number (1–12)',                 isKey: false, responsibilityType: 'none' },
+          { name: 'quarter',         dataType: 'VARCHAR', description: 'Calendar quarter (Q1–Q4)',            isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_period',   dataType: 'VARCHAR', description: 'Fiscal period code (e.g. FY25-P01)', isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_year',     dataType: 'VARCHAR', description: 'Fiscal year (e.g. FY2025)',           isKey: false, responsibilityType: 'none' },
+          { name: 'is_weekend',      dataType: 'BOOLEAN', description: 'True if Saturday or Sunday',         isKey: false, responsibilityType: 'none' },
+          { name: 'is_holiday',      dataType: 'BOOLEAN', description: 'True if public holiday',             isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_customer', name: 'Customer / Account', category: 'who', icon: '👤',
+        description: 'Describes who buys or receives a product or service. Used across sales, service, and billing events.',
+        columns: [
+          { name: 'customer_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'customer_id',     dataType: 'VARCHAR', description: 'Natural key from source system',     isKey: false, responsibilityType: 'none' },
+          { name: 'customer_name',   dataType: 'VARCHAR', description: 'Full customer or account name',      isKey: false, responsibilityType: 'none' },
+          { name: 'customer_type',   dataType: 'VARCHAR', description: 'e.g. Individual, Corporate, Public', isKey: false, responsibilityType: 'none' },
+          { name: 'segment',         dataType: 'VARCHAR', description: 'Market or value segment',            isKey: false, responsibilityType: 'none' },
+          { name: 'industry',        dataType: 'VARCHAR', description: 'Industry vertical',                  isKey: false, responsibilityType: 'none' },
+          { name: 'region',          dataType: 'VARCHAR', description: 'Geographic region',                  isKey: false, responsibilityType: 'none' },
+          { name: 'country',         dataType: 'VARCHAR', description: 'Country of registration',            isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the account is active',     isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_product', name: 'Product / Service', category: 'what', icon: '📦',
+        description: 'Describes what is sold, delivered, or consumed. Used across sales, fulfilment, and cost events.',
+        columns: [
+          { name: 'product_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'product_code',    dataType: 'VARCHAR', description: 'SKU or product code from source',    isKey: false, responsibilityType: 'none' },
+          { name: 'product_name',    dataType: 'VARCHAR', description: 'Full product or service name',       isKey: false, responsibilityType: 'none' },
+          { name: 'category',        dataType: 'VARCHAR', description: 'Primary product category',           isKey: false, responsibilityType: 'none' },
+          { name: 'sub_category',    dataType: 'VARCHAR', description: 'Secondary category',                 isKey: false, responsibilityType: 'none' },
+          { name: 'brand',           dataType: 'VARCHAR', description: 'Brand or product family',            isKey: false, responsibilityType: 'none' },
+          { name: 'unit_cost',       dataType: 'DECIMAL', description: 'Standard cost per unit',             isKey: false, responsibilityType: 'none' },
+          { name: 'standard_price',  dataType: 'DECIMAL', description: 'List / standard selling price',     isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the product is active',     isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_location', name: 'Location / Store', category: 'where', icon: '📍',
+        description: 'Describes where an event takes place — store, site, warehouse, or territory.',
+        columns: [
+          { name: 'location_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'location_code',   dataType: 'VARCHAR', description: 'Natural key from source system',     isKey: false, responsibilityType: 'none' },
+          { name: 'location_name',   dataType: 'VARCHAR', description: 'Store or site name',                 isKey: false, responsibilityType: 'none' },
+          { name: 'location_type',   dataType: 'VARCHAR', description: 'e.g. Store, Warehouse, Office',     isKey: false, responsibilityType: 'none' },
+          { name: 'region',          dataType: 'VARCHAR', description: 'Sales region or territory',          isKey: false, responsibilityType: 'none' },
+          { name: 'country',         dataType: 'VARCHAR', description: 'Country',                            isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the location is active',    isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_employee', name: 'Employee / Person', category: 'who', icon: '🧑',
+        description: 'Describes internal staff involved in an event. Supports org hierarchy and responsibility tracking.',
+        columns: [
+          { name: 'person_key',      dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'org_hierarchy' },
+          { name: 'employee_id',     dataType: 'VARCHAR', description: 'Employee number from HR system',     isKey: false, responsibilityType: 'none' },
+          { name: 'full_name',       dataType: 'VARCHAR', description: 'Full name',                          isKey: false, responsibilityType: 'none' },
+          { name: 'department',      dataType: 'VARCHAR', description: 'Department',                         isKey: false, responsibilityType: 'none' },
+          { name: 'job_title',       dataType: 'VARCHAR', description: 'Job title or role',                  isKey: false, responsibilityType: 'none' },
+          { name: 'manager_key',     dataType: 'UUID',    description: 'FK to person_key of direct manager', isKey: false, responsibilityType: 'org_hierarchy' },
+          { name: 'hire_date',       dataType: 'DATE',    description: 'Date of hire',                       isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the employee is active',    isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_cost_centre', name: 'Cost Centre', category: 'where', icon: '🏢',
+        description: 'Organisational unit that incurs costs and holds budget authority. Essential for expense and budget analysis.',
+        columns: [
+          { name: 'cost_centre_key',  dataType: 'UUID',   description: 'Surrogate key',                      isKey: true,  responsibilityType: 'cost_centre' },
+          { name: 'cost_centre_code', dataType: 'VARCHAR',description: 'Natural key / code from finance system', isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre_name', dataType: 'VARCHAR',description: 'Descriptive name',                   isKey: false, responsibilityType: 'none' },
+          { name: 'parent_cc_key',   dataType: 'UUID',    description: 'FK to parent cost centre (hierarchy)', isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'budget_holder',   dataType: 'VARCHAR', description: 'Name of person with budget authority', isKey: false, responsibilityType: 'budget_holder' },
+          { name: 'department',      dataType: 'VARCHAR', description: 'Owning department',                  isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the cost centre is active',  isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_gl_account', name: 'GL Account / Chart of Accounts', category: 'what', icon: '📒',
+        description: 'General Ledger account structure. Links operational events to financial postings for I&E reconciliation.',
+        columns: [
+          { name: 'account_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'account_code',    dataType: 'VARCHAR', description: 'GL account code',                    isKey: false, responsibilityType: 'none' },
+          { name: 'account_name',    dataType: 'VARCHAR', description: 'Account description',                isKey: false, responsibilityType: 'none' },
+          { name: 'account_type',    dataType: 'VARCHAR', description: 'e.g. Income, Expenditure, Balance Sheet', isKey: false, responsibilityType: 'none' },
+          { name: 'pl_section',      dataType: 'VARCHAR', description: 'P&L section (Revenue, COGS, OPEX, etc.)', isKey: false, responsibilityType: 'none' },
+          { name: 'is_income',       dataType: 'BOOLEAN', description: 'True if an income/revenue account',  isKey: false, responsibilityType: 'none' },
+          { name: 'is_expenditure',  dataType: 'BOOLEAN', description: 'True if a cost/expenditure account', isKey: false, responsibilityType: 'none' },
+          { name: 'normal_balance',  dataType: 'VARCHAR', description: 'Dr (Debit) or Cr (Credit)',          isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_org', name: 'Org Unit / Business Unit', category: 'where', icon: '🏦',
+        description: 'Business unit or profit centre with P&L ownership. Supports business area and entity-level reporting.',
+        columns: [
+          { name: 'org_key',         dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'profit_centre' },
+          { name: 'org_code',        dataType: 'VARCHAR', description: 'Natural key / code',                 isKey: false, responsibilityType: 'none' },
+          { name: 'org_name',        dataType: 'VARCHAR', description: 'Full name of the business unit',     isKey: false, responsibilityType: 'none' },
+          { name: 'org_level',       dataType: 'INT',     description: 'Hierarchy level (1=top)',            isKey: false, responsibilityType: 'none' },
+          { name: 'parent_org_key',  dataType: 'UUID',    description: 'FK to parent org unit',              isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'responsible_person', dataType: 'VARCHAR', description: 'Name of accountable leader',     isKey: false, responsibilityType: 'budget_holder' },
+          { name: 'region',          dataType: 'VARCHAR', description: 'Geographic region',                  isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_campaign', name: 'Campaign / Promotion', category: 'why', icon: '📣',
+        description: 'Marketing or promotional activity driving an event. Enables ROI and campaign attribution analysis.',
+        columns: [
+          { name: 'campaign_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'campaign_code',   dataType: 'VARCHAR', description: 'Campaign code from CRM/marketing system', isKey: false, responsibilityType: 'none' },
+          { name: 'campaign_name',   dataType: 'VARCHAR', description: 'Campaign or promotion name',         isKey: false, responsibilityType: 'none' },
+          { name: 'campaign_type',   dataType: 'VARCHAR', description: 'e.g. Email, Paid, Event, Referral', isKey: false, responsibilityType: 'none' },
+          { name: 'start_date',      dataType: 'DATE',    description: 'Campaign start date',                isKey: false, responsibilityType: 'none' },
+          { name: 'end_date',        dataType: 'DATE',    description: 'Campaign end date',                  isKey: false, responsibilityType: 'none' },
+          { name: 'budget',          dataType: 'DECIMAL', description: 'Campaign budget amount',             isKey: false, responsibilityType: 'none' },
+          { name: 'campaign_owner',  dataType: 'VARCHAR', description: 'Person responsible',                 isKey: false, responsibilityType: 'budget_holder' }
+        ]
+      },
+      {
+        id: 'dim_variance', name: 'Variance / Planning Version', category: 'why', icon: '⚖️',
+        description: 'Distinguishes Actual, Budget, Forecast, and Reforecast versions. Essential for Budget vs Actual analysis and budgetary control.',
+        columns: [
+          { name: 'version_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
+          { name: 'version_code',    dataType: 'VARCHAR', description: 'Short code (e.g. ACT, BUD, FC1)',    isKey: false, responsibilityType: 'none' },
+          { name: 'version_name',    dataType: 'VARCHAR', description: 'Full name (e.g. Actual, Budget)',    isKey: false, responsibilityType: 'none' },
+          { name: 'version_type',    dataType: 'VARCHAR', description: 'Actual | Budget | Forecast | Reforecast', isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_year',     dataType: 'VARCHAR', description: 'Fiscal year this version covers',    isKey: false, responsibilityType: 'none' },
+          { name: 'is_current',      dataType: 'BOOLEAN', description: 'True if this is the active version', isKey: false, responsibilityType: 'none' }
+        ]
+      }
+    ];
+
     // ─── Global constants: column origin (source) ─────────
     const SOURCES = {
       source_system: {
@@ -272,8 +514,17 @@
       if (found) DataGen.render(found.event, found.project);
       else Router.navigate('projects');
     });
-    Router.register('recents', () => renderRecents());
-    Router.register('guide', () => renderGuide());
+    Router.register('dimensions',     ()       => DimensionLibrary.renderList());
+    Router.register('dimension/:id',  ({ id }) => DimensionLibrary.renderTemplate(id));
+    Router.register('pl-mapper',      ()       => PLMapper.renderProjectPicker());
+    Router.register('pl-mapper/:id',  ({ id }) => PLMapper.render(id));
+    Router.register('pl-coverage/:id', ({ id }) => PLMapper.renderCoverage(id));
+    Router.register('business-areas', ()       => BusinessAreas.renderProjectPicker());
+    Router.register('business-areas/:id', ({ id }) => BusinessAreas.render(id));
+    Router.register('grain-analysis', ()       => GrainAnalysis.renderProjectPicker());
+    Router.register('grain-analysis/:id', ({ id }) => GrainAnalysis.render(id));
+    Router.register('recents',  () => renderRecents());
+    Router.register('guide',    () => renderGuide());
     Router.register('settings', () => renderSettings());
 
     // ─── Recents view ──────────────────────────────────────

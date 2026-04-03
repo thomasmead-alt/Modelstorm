@@ -18,7 +18,13 @@ const Export = {
 
   // Export a single event's BEAM matrix as CSV
   eventToCSV(event) {
-    const headers = ['Column Name', 'Category', 'Category Label', '7W Meaning', 'Origin', 'Origin Label', 'Data Type', 'Format / Examples', 'Description', 'Notes'];
+    const headers = [
+      'Column Name', 'Category', 'Category Label', '7W Meaning',
+      'Origin', 'Origin Label', 'Data Type', 'Format / Examples',
+      'Additivity', 'Budget Control', 'Responsibility Type',
+      'P&L Line', 'Conformed Dimension',
+      'Description', 'Notes'
+    ];
     const rows = event.columns.map(col => [
       col.name,
       col.category,
@@ -28,6 +34,11 @@ const Export = {
       SOURCES[col.source || 'source_system']?.label || col.source || 'Source System',
       col.dataType,
       col.format || '',
+      col.category === 'how_many' ? (ADDITIVE_TYPES?.[col.additiveType || 'fully_additive']?.label || col.additiveType || '') : '',
+      col.category === 'how_many' ? (col.budgetControl ? 'Yes' : 'No') : '',
+      col.category !== 'how_many' ? (RESPONSIBILITY_TYPES?.[col.responsibilityType || 'none']?.label || col.responsibilityType || '') : '',
+      col.plLineId || '',
+      col.isConformed ? (col.publicDimensionId || 'Yes') : 'No',
       col.description || '',
       col.notes || ''
     ]);
@@ -43,9 +54,19 @@ const Export = {
   // Export all events in a project as CSV (multi-sheet-style, separated by blank lines)
   projectToCSV(project) {
     const sections = project.events.map(event => {
-      const headers = ['Event', 'Column Name', 'Category', 'Category Label', 'Origin', 'Origin Label', 'Data Type', 'Format / Examples', 'Description', 'Notes'];
+      const grain = event.grain || 'transaction';
+      const grainLabel = GRAINS?.[grain]?.label || grain;
+      const headers = [
+        'Event', 'Event Grain',
+        'Column Name', 'Category', 'Category Label', 'Origin', 'Origin Label',
+        'Data Type', 'Format / Examples',
+        'Additivity', 'Budget Control', 'Responsibility Type',
+        'P&L Line', 'Conformed Dimension',
+        'Description', 'Notes'
+      ];
       const rows = event.columns.map(col => [
         event.name,
+        grainLabel,
         col.name,
         col.category,
         CATEGORIES[col.category]?.label || col.category,
@@ -53,6 +74,11 @@ const Export = {
         SOURCES[col.source || 'source_system']?.label || col.source || 'Source System',
         col.dataType,
         col.format || '',
+        col.category === 'how_many' ? (ADDITIVE_TYPES?.[col.additiveType || 'fully_additive']?.label || col.additiveType || '') : '',
+        col.category === 'how_many' ? (col.budgetControl ? 'Yes' : 'No') : '',
+        col.category !== 'how_many' ? (RESPONSIBILITY_TYPES?.[col.responsibilityType || 'none']?.label || col.responsibilityType || '') : '',
+        col.plLineId || '',
+        col.isConformed ? (col.publicDimensionId || 'Yes') : 'No',
         col.description || '',
         col.notes || ''
       ]);

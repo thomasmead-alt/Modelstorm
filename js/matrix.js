@@ -33,11 +33,13 @@ const Matrix = {
       <div class="info-banner" id="matrixBanner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'" title="Dismiss">✕</button>
         <strong>BEAM Matrix</strong> — Describe each attribute of this business event. Assign a
-        <strong>7W category</strong> to each column and mark whether it comes from the
-        <strong>source system</strong> or will be <strong>derived</strong> in the data layer.
-        Populate the <em>Format / Examples</em> column to enable synthetic data generation.
+        <strong>7W category</strong> and mark whether it comes from the <strong>source system</strong>
+        or will be <strong>derived</strong> in the data layer. For measures, set the
+        <strong>additivity type</strong> so the tool can flag which KPIs require specific grain context.
         <a href="#" class="info-link" onclick="Matrix.show7WGuide(event)">See the 7W guide →</a>
       </div>
+
+      ${this._eventMetaPanel(event, project)}
 
       ${sourceSummary}
 
@@ -68,6 +70,10 @@ const Matrix = {
               <th class="col-source">
                 Origin
                 <div class="th-hint">Source system or derived in data layer</div>
+              </th>
+              <th class="col-classify">
+                Classification
+                <div class="th-hint">Additivity (measures) · Responsibility (dimensions)</div>
               </th>
               <th class="col-type">
                 Data Type
@@ -183,6 +189,9 @@ const Matrix = {
             ${sourceOptions}
           </select>
         </td>
+        <td class="col-classify">
+          ${this._classifyCell(col)}
+        </td>
         <td class="col-type">
           <select class="cell-select"
             onchange="Matrix.updateField('${col.id}', 'dataType', this.value)">
@@ -223,7 +232,7 @@ const Matrix = {
   _emptyMatrixRow() {
     return `
       <tr class="empty-matrix-row">
-        <td colspan="8">
+        <td colspan="9">
           <div class="empty-matrix">
             <p>No columns yet. Click <strong>+ Add Column</strong> to start describing this event's attributes.</p>
             <p class="hint-text">Start with key <em>Who</em> (person/org), <em>What</em> (product/item),
@@ -233,6 +242,146 @@ const Matrix = {
         </td>
       </tr>
     `;
+  },
+
+  // ── Event metadata panel ──────────────────────────────────
+
+  _eventMetaPanel(event, project) {
+    const grain = event.grain || 'transaction';
+    const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain };
+    const grainOpts = typeof GRAINS !== 'undefined'
+      ? Object.entries(GRAINS).map(([k, g]) =>
+          `<option value="${k}" ${grain === k ? 'selected' : ''}>${g.label}</option>`).join('')
+      : '';
+
+    const allBAs = project.businessAreas || [];
+    const assignedIds = event.businessAreaIds || [];
+    const assignedTags = allBAs.filter(b => assignedIds.includes(b.id)).map(b =>
+      `<span class="ba-tag" style="background:${b.color}" title="Remove"
+        onclick="Matrix.removeBA('${event.id}', '${b.id}')">
+        ${this._esc(b.name)} <span class="ba-tag-remove">✕</span>
+      </span>`
+    ).join('');
+    const unassigned = allBAs.filter(b => !assignedIds.includes(b.id));
+    const addMenu = unassigned.length
+      ? unassigned.map(b =>
+          `<option value="${b.id}">${this._esc(b.name)}</option>`).join('')
+      : '';
+
+    const naBAs = !allBAs.length
+      ? `<span style="font-size:11px;color:var(--text-subtle)">No business areas —
+           <a href="#business-areas/${project.id}" style="color:var(--info)">add them in Business Areas →</a>
+         </span>`
+      : '';
+
+    // Quick stats
+    const measures = event.columns.filter(c => c.category === 'how_many');
+    const naCount = measures.filter(c => c.additiveType === 'non_additive').length;
+    const saCount = measures.filter(c => c.additiveType === 'semi_additive').length;
+    const bcCount = event.columns.filter(c => c.budgetControl).length;
+
+    return `
+      <div class="event-meta-panel">
+        <div class="meta-field">
+          <label>Event Grain</label>
+          <select onchange="Matrix.updateGrain('${event.id}', this.value)">
+            ${grainOpts}
+          </select>
+          <span style="font-size:10px;color:var(--text-subtle);margin-top:2px">
+            ${(typeof GRAINS !== 'undefined' && GRAINS[grain]) ? GRAINS[grain].description : ''}
+          </span>
+        </div>
+        <div class="meta-field">
+          <label>Business Areas</label>
+          <div class="ba-tags">
+            ${assignedTags}
+            ${naBAs}
+            ${unassigned.length ? `
+              <select class="ba-tag-add" onchange="Matrix.addBA('${event.id}', this.value); this.value=''">
+                <option value="">+ Add area</option>
+                ${addMenu}
+              </select>` : ''}
+          </div>
+        </div>
+        <div class="meta-field" style="margin-left:auto;text-align:right">
+          <label>KPI Notes</label>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.8">
+            ${naCount > 0 ? `<span class="additive-badge additive-na" style="margin-right:4px">${naCount} Non-Additive</span>` : ''}
+            ${saCount > 0 ? `<span class="additive-badge additive-sa" style="margin-right:4px">${saCount} Semi-Additive</span>` : ''}
+            ${bcCount > 0 ? `<span style="font-size:11px;color:#7c3aed">💰 ${bcCount} budget-controlled</span>` : ''}
+            ${naCount === 0 && saCount === 0 && bcCount === 0 ? '<span style="color:var(--text-subtle);font-size:11px">All measures fully additive</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _classifyCell(col) {
+    if (col.category === 'how_many') {
+      const at = col.additiveType || 'fully_additive';
+      const atInfo = (typeof ADDITIVE_TYPES !== 'undefined' && ADDITIVE_TYPES[at]) || { short: at, label: at };
+      const atOpts = typeof ADDITIVE_TYPES !== 'undefined'
+        ? Object.entries(ADDITIVE_TYPES).map(([k, a]) =>
+            `<option value="${k}" ${at === k ? 'selected' : ''}>${a.label}</option>`).join('')
+        : '';
+      const bcChecked = col.budgetControl ? 'checked' : '';
+      const shortClass = { fully_additive: 'fa', semi_additive: 'sa', non_additive: 'na' }[at] || 'fa';
+      return `<div class="classify-cell">
+        <select class="cell-select" style="font-size:11px;padding:2px 4px"
+          onchange="Matrix.updateField('${col.id}', 'additiveType', this.value); Matrix.renderEvent(Matrix._getEventIdForCol('${col.id}'))"
+          title="${atInfo.description || ''}">
+          ${atOpts}
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer" title="Mark as budget-controlled measure">
+          <input type="checkbox" ${bcChecked}
+            onchange="Matrix.updateField('${col.id}', 'budgetControl', this.checked)">
+          💰 Budget control
+        </label>
+      </div>`;
+    } else {
+      const rt = col.responsibilityType || 'none';
+      const rtInfo = (typeof RESPONSIBILITY_TYPES !== 'undefined' && RESPONSIBILITY_TYPES[rt]) || { label: rt };
+      const rtOpts = typeof RESPONSIBILITY_TYPES !== 'undefined'
+        ? Object.entries(RESPONSIBILITY_TYPES).map(([k, r]) =>
+            `<option value="${k}" ${rt === k ? 'selected' : ''}>${r.label}</option>`).join('')
+        : '';
+      return `<div class="classify-cell">
+        <select class="cell-select" style="font-size:11px;padding:2px 4px"
+          onchange="Matrix.updateField('${col.id}', 'responsibilityType', this.value)"
+          title="${rtInfo.description || ''}">
+          ${rtOpts}
+        </select>
+      </div>`;
+    }
+  },
+
+  updateGrain(eventId, grain) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    event.grain = grain;
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
+  addBA(eventId, baId) {
+    if (!baId) return;
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    if (!event.businessAreaIds) event.businessAreaIds = [];
+    if (!event.businessAreaIds.includes(baId)) event.businessAreaIds.push(baId);
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
+  removeBA(eventId, baId) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    event.businessAreaIds = (event.businessAreaIds || []).filter(id => id !== baId);
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
   },
 
   addRow(eventId) {
@@ -248,7 +397,15 @@ const Matrix = {
       dataType: 'VARCHAR',
       format: '',
       description: '',
-      notes: ''
+      notes: '',
+      additiveType: 'fully_additive',
+      requiredGrain: null,
+      formula: '',
+      budgetControl: false,
+      plLineId: '',
+      responsibilityType: 'none',
+      publicDimensionId: '',
+      isConformed: false
     };
     event.columns.push(col);
     Storage.saveEvent(project.id, event);

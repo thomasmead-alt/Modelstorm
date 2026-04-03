@@ -113,6 +113,14 @@ const Projects = {
       </div>
 
       <div class="export-section">
+        <h3>Analysis</h3>
+        <div class="export-actions">
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('pl-mapper/${project.id}')">$ P&amp;L Mapper</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('business-areas/${project.id}')">🏢 Business Areas</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('grain-analysis/${project.id}')">⚡ Grain Analysis</button>
+        </div>
+      </div>
+      <div class="export-section" style="margin-top:8px">
         <h3>Export Project</h3>
         <div class="export-actions">
           <button class="btn btn-ghost btn-sm" onclick="Export.toJSON(Storage.getProject('${project.id}'))">⬇ Export JSON</button>
@@ -131,20 +139,43 @@ const Projects = {
       return `<span class="badge-sm" style="background:${c?.color || '#6b7280'}" title="${c?.label || cat}: ${c?.meaning || ''}">${c?.label || cat} ×${n}</span>`;
     }).join('');
 
+    // Grain badge
+    const grain = event.grain || 'transaction';
+    const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, color: '#6b7280', short: grain.slice(0,3).toUpperCase() };
+    const grainBadge = `<span class="grain-badge" style="background:${grainInfo.color}18;color:${grainInfo.color};border:1px solid ${grainInfo.color}40">${grainInfo.short || grainInfo.label}</span>`;
+
+    // Additivity warnings
+    const measures = event.columns.filter(c => c.category === 'how_many');
+    const naCount = measures.filter(c => c.additiveType === 'non_additive').length;
+    const saCount = measures.filter(c => c.additiveType === 'semi_additive').length;
+    const bcCount = event.columns.filter(c => c.budgetControl).length;
+    const warnings = [
+      naCount > 0 ? `<span class="additive-badge additive-na">${naCount} NA</span>` : '',
+      saCount > 0 ? `<span class="additive-badge additive-sa">${saCount} SA</span>` : '',
+      bcCount > 0 ? `<span style="font-size:10px;color:#7c3aed">💰${bcCount}</span>` : ''
+    ].filter(Boolean).join(' ');
+
     return `
       <div class="card event-card" onclick="Router.navigate('event/${event.id}')">
         <div class="card-icon event-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 12h6M9 16h4"/></svg>
         </div>
         <div class="card-body">
-          <h3 class="card-title">${this._esc(event.name)}</h3>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <h3 class="card-title" style="margin:0">${this._esc(event.name)}</h3>
+            ${grainBadge}
+          </div>
           ${event.description ? `<p class="card-desc">${this._esc(event.description)}</p>` : ''}
           <div class="card-badges">${badges || '<span class="muted">No columns yet</span>'}</div>
-          <div class="card-meta"><span>${colCount} column${colCount !== 1 ? 's' : ''}</span></div>
+          <div class="card-meta" style="align-items:center">
+            <span>${colCount} column${colCount !== 1 ? 's' : ''}</span>
+            ${warnings ? `<span>${warnings}</span>` : ''}
+          </div>
         </div>
         <div class="card-actions" onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${event.id}')">Edit Matrix</button>
-          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${event.id}')">View Diagram</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${event.id}')">Diagram</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('pl-mapper/${projectId}')">P&amp;L</button>
           <button class="btn btn-danger btn-sm" onclick="Projects.confirmDeleteEvent('${projectId}', '${event.id}', '${this._esc(event.name)}')">Delete</button>
         </div>
       </div>
