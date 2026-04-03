@@ -276,20 +276,20 @@
       identifier:            { label: 'Identifier (exclude)', color: '#9ca3af',  short: 'ID',  description: 'Key or ID — not a model input' }
     };
 
-    const ML_PATTERNS = [
-      { id: 'time_series',   name: 'Time Series Forecasting',       icon: '📈', color: '#7c3aed',
+    const ML_PATTERNS = {
+      time_series:    { label: 'Time Series Forecasting',       icon: '📈', color: '#7c3aed',
         description: 'Semi-additive measures with a time (When) dimension are strong candidates for time-series forecasting. Use to predict future values of balances, headcount, or inventory.' },
-      { id: 'churn',         name: 'Churn / Retention Prediction',  icon: '🔄', color: '#dc2626',
+      churn:          { label: 'Churn / Retention Prediction',  icon: '🔄', color: '#dc2626',
         description: 'Events with a Who dimension and multiple measures enable churn and retention models. Track engagement patterns to predict which customers are at risk.' },
-      { id: 'recommendation',name: 'Recommendation Engine',         icon: '🎯', color: '#2563eb',
+      recommendation: { label: 'Recommendation Engine',         icon: '🎯', color: '#2563eb',
         description: 'Events with Who, What, and a quantity measure (e.g. purchase, view, rating) enable collaborative filtering and personalised recommendations.' },
-      { id: 'anomaly',       name: 'Anomaly Detection',             icon: '⚠️', color: '#d97706',
+      anomaly:        { label: 'Anomaly Detection',             icon: '⚠️', color: '#d97706',
         description: 'Non-additive measures with budget control flags are ideal for variance anomaly detection — flagging unusual spend, revenue dips, or ratio outliers.' },
-      { id: 'segmentation',  name: 'Customer Segmentation',         icon: '👥', color: '#059669',
+      segmentation:   { label: 'Customer Segmentation',         icon: '👥', color: '#059669',
         description: 'Multiple measures on a Who dimension enable unsupervised clustering — group customers by behaviour, value, or spend patterns.' },
-      { id: 'demand',        name: 'Demand Forecasting',            icon: '📦', color: '#0891b2',
+      demand:         { label: 'Demand Forecasting',            icon: '📦', color: '#0891b2',
         description: 'Transaction-grain events with a What (product) dimension and quantity measures enable SKU-level demand forecasting and replenishment optimisation.' }
-    ];
+    };
 
     // ─── Global constants: SCD types ──────────────────────
     const SCD_TYPES = {

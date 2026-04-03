@@ -1,56 +1,5 @@
-// ─── ML_TAGS global constant ──────────────────────────────────────────────────
-// Defined here so it is available as a global to all modules loaded after this one.
-const ML_TAGS = {
-  none:                  { label: 'Not Applicable',        color: '#9ca3af', bg: '#f3f4f6' },
-  forecast_target:       { label: 'Forecast Target',       color: '#7c3aed', bg: '#f5f3ff' },
-  classification_target: { label: 'Classification Target', color: '#db2777', bg: '#fdf2f8' },
-  regression_feature:    { label: 'Regression Feature',    color: '#2563eb', bg: '#eff6ff' },
-  clustering_dimension:  { label: 'Clustering Dimension',  color: '#0891b2', bg: '#ecfeff' },
-  anomaly_signal:        { label: 'Anomaly Signal',        color: '#dc2626', bg: '#fef2f2' },
-  identifier:            { label: 'Identifier',            color: '#6b7280', bg: '#f9fafb' }
-};
-
-// ─── ML_PATTERNS global constant ─────────────────────────────────────────────
-const ML_PATTERNS = {
-  time_series: {
-    label: 'Time Series Forecasting',
-    icon: '📈',
-    color: '#7c3aed',
-    description: 'Event has semi-additive measures with a time dimension — suitable for forecasting future values using historical trends.'
-  },
-  churn: {
-    label: 'Churn Prediction',
-    icon: '🔄',
-    color: '#db2777',
-    description: 'Event tracks entities (who) with multiple behavioural measures — suitable for predicting customer or user churn.'
-  },
-  recommendation: {
-    label: 'Recommendation Engine',
-    icon: '💡',
-    color: '#2563eb',
-    description: 'Event links who (person) with what (item) and a measure — suitable for collaborative filtering or content-based recommendation.'
-  },
-  anomaly: {
-    label: 'Anomaly Detection',
-    icon: '⚠️',
-    color: '#dc2626',
-    description: 'Event has non-additive measures under budget control — suitable for detecting outliers and variance from expected norms.'
-  },
-  segmentation: {
-    label: 'Customer Segmentation',
-    icon: '🎯',
-    color: '#0891b2',
-    description: 'Event has a who dimension with three or more measures — suitable for clustering entities into behavioural or value segments.'
-  },
-  demand: {
-    label: 'Demand Forecasting',
-    icon: '📦',
-    color: '#d97706',
-    description: 'Event captures transactional demand for items (what) — suitable for forecasting future stock, supply, or service requirements.'
-  }
-};
-
 // ─── MLAnalysis module ────────────────────────────────────────────────────────
+// ML_TAGS and ML_PATTERNS are defined as globals in index.html
 const MLAnalysis = {
 
   // ── Project picker ──────────────────────────────────────────────────────────
