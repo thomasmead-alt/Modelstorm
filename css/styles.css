@@ -16,9 +16,11 @@
 
   /* App colours */
   --bg: #f4f5f7;
+  --bg-card: #ffffff;
   --surface: #ffffff;
   --border: #e5e7eb;
   --text: #111827;
+  --text-primary: #111827;
   --text-muted: #6b7280;
   --text-subtle: #9ca3af;
   --primary: #e85d04;

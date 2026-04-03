@@ -871,7 +871,9 @@
         ]
       };
 
-      // Apply migration so all new fields get defaults
+      // Save to storage first so migration can apply all Phase 3 field defaults
+      Storage.saveProject(project);
+      // Reload to get migrated version with all defaults applied
       const migrated = Storage.load().projects.find(p => p.id === project.id);
       // Also set additivity for known non-additive/semi-additive measures
       if (migrated) {
