@@ -265,14 +265,36 @@ const SapMigration = (() => {
   // ── ECC→S/4 Reference Tab ───────────────────────────────────
 
   function _renderReference() {
-    const tableRows = (typeof ECC_TO_S4_TABLE_MAP !== 'undefined' ? ECC_TO_S4_TABLE_MAP : []).map(row => `
-      <tr>
-        <td class="ecc-col" style="padding:8px;font-family:monospace;font-weight:600">${esc(row.eccTable)}</td>
-        <td class="s4-col"  style="padding:8px;font-family:monospace;font-weight:600">${esc(row.s4Table)}</td>
-        <td style="padding:8px;font-size:12px;color:var(--text-subtle)">${esc(row.description)}</td>
-        <td class="note-col" style="padding:8px;font-size:12px">${esc(row.note)}</td>
-      </tr>
-    `).join('');
+    // Group rows by module section (comment rows from ECC_TO_S4_TABLE_MAP are not emitted,
+    // so we detect module breaks by looking for known table name prefixes)
+    const MODULE_LABELS = {
+      'BKPF': 'FI — Financial Accounting', 'BSEG': 'FI — Financial Accounting',
+      'COEP': 'CO — Controlling',  'COSP': 'CO — Controlling',  'COSS': 'CO — Controlling',
+      'CE1XXXX': 'CO — CO-PA',
+      'ANLP': 'FI-AA — Asset Accounting',
+      'MLHD/MLIT': 'MM — Material Ledger',
+      'KNA1': 'MM/SD — Master Data',  'LFA1': 'MM/SD — Master Data',
+      'PROJ/PRPS': 'PS — Project System', 'AFKO/AFPO': 'PS — Project System',
+      'MPLA/MPOS': 'PM — Plant Maintenance', 'QMEL': 'PM — Plant Maintenance', 'AUFK': 'PM — Plant Maintenance',
+      'VIQMEL': 'CS — Customer Service',
+      'VBAK': 'SD — Sales & Distribution', 'VBAP': 'SD — Sales & Distribution', 'VEDA': 'SD — Sales & Distribution',
+      'VIOB00': 'RE-FX — Real Estate', 'VIOB20': 'RE-FX — Real Estate',
+      'VIOB40': 'RE-FX — Real Estate', 'VIRE00': 'RE-FX — Real Estate',
+    };
+    let lastModule = null;
+    const tableRows = (typeof ECC_TO_S4_TABLE_MAP !== 'undefined' ? ECC_TO_S4_TABLE_MAP : []).map(row => {
+      const mod = MODULE_LABELS[row.eccTable] || null;
+      const header = mod && mod !== lastModule
+        ? `<tr><td colspan="4" style="padding:10px 8px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-subtle);background:var(--bg-surface);border-top:1px solid var(--border)">${esc(mod)}</td></tr>`
+        : '';
+      if (mod) lastModule = mod;
+      return `${header}<tr>
+        <td class="ecc-col" style="padding:7px 8px;font-family:monospace;font-weight:600;font-size:12px">${esc(row.eccTable)}</td>
+        <td class="s4-col"  style="padding:7px 8px;font-family:monospace;font-weight:600;font-size:12px">${esc(row.s4Table)}</td>
+        <td style="padding:7px 8px;font-size:12px;color:var(--text-subtle)">${esc(row.description)}</td>
+        <td class="note-col" style="padding:7px 8px;font-size:12px">${esc(row.note)}</td>
+      </tr>`;
+    }).join('');
 
     return `
       <div class="card" style="padding:20px;margin-bottom:16px">
@@ -324,6 +346,14 @@ const SapMigration = (() => {
           <li><strong>Account-Based CO-PA</strong> — Primary in S/4HANA. Costing-based CO-PA can be operated in parallel but will be deprecated. Plan to migrate value fields to account-based equivalents.</li>
           <li><strong>New Asset Accounting</strong> — Parallel valuation areas are mandatory. Depreciation postings go directly to ACDOCA; old ANLP postings pattern no longer used.</li>
           <li><strong>Controlling Area Currency</strong> — Stored in ACDOCA.KSL (was COEP.WKGBTR). Field name changed; amounts may differ if transfer prices are activated.</li>
+          <li><strong>Cost Centre Categories</strong> — SAP CSKS.KOSAR classifies cost centres (Admin, Production, Sales, Service etc.). Statistical cost centres receive informational postings only and never settle. RE cost centres are linked to RE-FX objects and carry service charge / maintenance spend.</li>
+          <li><strong>Internal Order Flavours</strong> — All use AUFK but differ by order category: CO Internal Orders (01), PM Maintenance Orders (30), CS Service Orders (40), PP Production Orders (10). Investment orders (CapEx) link to AuC assets via IMPR. Statistical orders carry no real costs.</li>
+          <li><strong>PS Project System</strong> — PROJ/PRPS tables unchanged in S/4. Use CDS views I_ProjectDefinition and I_WorkPackage for BW extraction. WBS elements are the primary cost account assignment for CapEx projects above a threshold.</li>
+          <li><strong>PM Maintenance Plans</strong> — MPLA/MPOS tables unchanged. Maintenance orders generated from plans (AUFK, category 30) post actuals to ACDOCA in S/4. CDS view I_MaintenancePlan supports S/4 Fiori apps.</li>
+          <li><strong>CS Service Orders</strong> — Use AUFK (category 40). Billing runs via DP90 resource-related billing or Fiori-based service order billing in S/4. Revenue posts to ACDOCA; link to CO-PA profitability segment via order settlement.</li>
+          <li><strong>SD Sales Orders</strong> — VBAK/VBAP unchanged. The profitability segment (PAOBJNR) on VBAP links to CO-PA / ACDOCA. In S/4, CDS view I_SalesOrder replaces many custom VBAK joins. SD conditions flow to ACDOCA at billing.</li>
+          <li><strong>SD Contracts</strong> — VEDA structure unchanged. Contract release orders (KE orders) link back via VBAK.VGBEL. Use I_SalesContract CDS for Fiori-based contract monitoring.</li>
+          <li><strong>RE-FX (Flexible Real Estate)</strong> — VIOB* and VIRE* table structures carry forward from ECC. S/4 RE-FX adds IFRS 16 right-of-use asset and lease liability postings directly into ACDOCA. Use I_RentalAgreement and I_RealEstateObject CDS views for reporting. RE cost centres link building/unit operating costs to profit centres for segment reporting.</li>
         </ul>
       </div>
     `;

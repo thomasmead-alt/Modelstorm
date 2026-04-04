@@ -232,7 +232,9 @@
       budget_holder: { label: 'Budget Holder',  description: 'Person or role responsible for approving and controlling spend against a budget', color: '#059669' },
       org_hierarchy:    { label: 'Org Hierarchy',    description: 'Part of an organisational tree — has parent/child relationships with other members', color: '#d97706' },
       company_code:     { label: 'Company Code',     description: 'SAP Company Code — legal entity with self-contained financial accounting (Buchungskreis)', color: '#1d4ed8' },
-      controlling_area: { label: 'Controlling Area', description: 'SAP Controlling Area — management accounting scope spanning one or more company codes (Kostenrechnungskreis)', color: '#7c3aed' }
+      controlling_area: { label: 'Controlling Area', description: 'SAP Controlling Area — management accounting scope spanning one or more company codes (Kostenrechnungskreis)', color: '#7c3aed' },
+      re_object:        { label: 'RE-FX Object',     description: 'SAP RE-FX real estate object — Business Entity, Property, Building, Rental Unit or Rental Agreement',      color: '#0369a1' },
+      project_manager:  { label: 'Project Manager',  description: 'PS Project Manager — accountable for project delivery, budget and schedule',                                color: '#059669' }
     };
 
     // ─── Global constants: default P&L line structure ──────
@@ -335,6 +337,24 @@
       { eccTable: 'MLHD/MLIT',s4Table: 'ACDOCA',                description: 'Material Ledger Documents',        note: 'Material Ledger mandatory in S/4. Actual costing documents posted to ACDOCA.' },
       { eccTable: 'KNA1',     s4Table: 'BUT000 (Business Partner)', description: 'Customer Master',             note: 'Business Partner (BP) concept replaces separate Customer and Vendor master records.' },
       { eccTable: 'LFA1',     s4Table: 'BUT000 (Business Partner)', description: 'Vendor Master',              note: 'Business Partner (BP) concept replaces separate Customer and Vendor master records.' },
+      // ── PS — Project System ──────────────────────────────────────────────────────
+      { eccTable: 'PROJ/PRPS', s4Table: 'PROJ/PRPS (unchanged)',    description: 'PS Project Definition / WBS', note: 'Tables remain in S/4. Access via CDS views I_ProjectDefinition and I_WorkPackage for BW extraction.' },
+      { eccTable: 'AFKO/AFPO', s4Table: 'AFKO/AFPO (unchanged)',    description: 'PS/PP Network Order Header/Item', note: 'Order tables unchanged. Use CDS view I_MaintenanceOrder for S/4 Fiori-aligned extraction.' },
+      // ── PM — Plant Maintenance ───────────────────────────────────────────────────
+      { eccTable: 'MPLA/MPOS', s4Table: 'MPLA/MPOS (unchanged)',    description: 'Maintenance Plan / Item',    note: 'Structure unchanged in S/4. CDS view I_MaintenancePlan available for reporting.' },
+      { eccTable: 'QMEL',      s4Table: 'QMEL (unchanged)',          description: 'PM/QM Notification',        note: 'Notification table unchanged. CDS view I_MaintenanceNotification in S/4.' },
+      { eccTable: 'AUFK',      s4Table: 'AUFK (unchanged)',          description: 'Order Master (PM/CS/CO)',    note: 'AUFK remains for all order types. Actual costs now in ACDOCA; AFKO/AFPO for operations.' },
+      // ── CS — Customer Service ────────────────────────────────────────────────────
+      { eccTable: 'VIQMEL',    s4Table: 'VIQMEL / QMEL',            description: 'CS Service Notification',   note: 'CS notifications use same QMEL table. S/4 adds I_ServiceOrderItem CDS view.' },
+      // ── SD — Sales & Distribution ────────────────────────────────────────────────
+      { eccTable: 'VBAK',      s4Table: 'VBAK (unchanged)',          description: 'SD Sales Order Header',     note: 'Tables remain. S/4 adds CDS view I_SalesOrder. VBAPn profitability segment links to ACDOCA via PAOBJNR.' },
+      { eccTable: 'VBAP',      s4Table: 'VBAP (unchanged)',          description: 'SD Sales Order Item',       note: 'Item table unchanged. Material ledger integration enhanced in S/4 (actual COGS posted to ACDOCA).' },
+      { eccTable: 'VEDA',      s4Table: 'VEDA (unchanged)',          description: 'SD Contract Data',          note: 'Contract conditions table unchanged. Use CDS view I_SalesContract for S/4 extraction.' },
+      // ── RE-FX — Real Estate ──────────────────────────────────────────────────────
+      { eccTable: 'VIOB00',    s4Table: 'VIOB00 / RE-FX CDS',       description: 'RE Business Entity',        note: 'RE-FX object tables (VIOB*) remain in S/4. New CDS views: I_RealEstateObject, I_RentalAgreement. IFRS 16 ROU asset calculation embedded in S/4 RE-FX.' },
+      { eccTable: 'VIOB20',    s4Table: 'VIOB20 / RE-FX CDS',       description: 'RE Building',               note: 'Building table unchanged. Area management enhanced in S/4 with I_RealEstateBuilding CDS view.' },
+      { eccTable: 'VIOB40',    s4Table: 'VIOB40 / RE-FX CDS',       description: 'RE Rental Unit',            note: 'Rental unit table unchanged. Occupancy and vacancy managed via I_RentalUnit CDS view in S/4.' },
+      { eccTable: 'VIRE00',    s4Table: 'VIRE00 / RE-FX CDS',       description: 'RE Rental Agreement',       note: 'Agreement master unchanged. S/4 RE-FX adds IFRS 16 lease liability / ROU asset posting automation. Use I_RentalAgreement CDS view.' },
     ];
 
     // ─── Global constants: public dimension templates ──────
@@ -415,15 +435,20 @@
       },
       {
         id: 'dim_cost_centre', name: 'Cost Centre', category: 'where', icon: '🏢',
-        description: 'Organisational unit that incurs costs and holds budget authority. Essential for expense and budget analysis.',
+        description: 'SAP Cost Centre (KOSTL/CSKS) — organisational unit that incurs costs and holds budget authority. Includes SAP-specific category and functional area for different cost centre flavours (Admin, Production, Sales, RE, Statistical).',
         columns: [
-          { name: 'cost_centre_key',  dataType: 'UUID',   description: 'Surrogate key',                      isKey: true,  responsibilityType: 'cost_centre' },
-          { name: 'cost_centre_code', dataType: 'VARCHAR',description: 'Natural key / code from finance system', isKey: false, responsibilityType: 'none' },
-          { name: 'cost_centre_name', dataType: 'VARCHAR',description: 'Descriptive name',                   isKey: false, responsibilityType: 'none' },
-          { name: 'parent_cc_key',   dataType: 'UUID',    description: 'FK to parent cost centre (hierarchy)', isKey: false, responsibilityType: 'cost_centre' },
-          { name: 'budget_holder',   dataType: 'VARCHAR', description: 'Name of person with budget authority', isKey: false, responsibilityType: 'budget_holder' },
-          { name: 'department',      dataType: 'VARCHAR', description: 'Owning department',                  isKey: false, responsibilityType: 'none' },
-          { name: 'is_active',       dataType: 'BOOLEAN', description: 'Whether the cost centre is active',  isKey: false, responsibilityType: 'none' }
+          { name: 'cost_centre_key',    dataType: 'UUID',    description: 'Surrogate key',                                    isKey: true,  responsibilityType: 'cost_centre' },
+          { name: 'kostl',              dataType: 'VARCHAR', description: 'SAP KOSTL — cost centre code (up to 10 chars)',     isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre_name',   dataType: 'VARCHAR', description: 'Short description (CSKS.KTEXT)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area',   dataType: 'VARCHAR', description: 'Owning controlling area (KOKRS)',                  isKey: false, responsibilityType: 'controlling_area' },
+          { name: 'cost_centre_category', dataType: 'VARCHAR', description: 'SAP CSKS.KOSAR: A=Admin, F=Finance, H=HR, I=IT, L=Logistics, P=Production, R=Research, S=Sales, V=Service; or custom', isKey: false, responsibilityType: 'none' },
+          { name: 'functional_area',    dataType: 'VARCHAR', description: 'Functional area for cost-of-sales accounting (FKBER)', isKey: false, responsibilityType: 'none' },
+          { name: 'cc_type',            dataType: 'VARCHAR', description: 'Flavour: Real | Statistical | RE-FX | Partner | Project',  isKey: false, responsibilityType: 'none' },
+          { name: 'parent_cc_key',      dataType: 'UUID',    description: 'FK to parent cost centre — hierarchy node',        isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'budget_holder',      dataType: 'VARCHAR', description: 'Person with budget authority (VERAK)',              isKey: false, responsibilityType: 'budget_holder' },
+          { name: 'hierarchy_area',     dataType: 'VARCHAR', description: 'Standard hierarchy node this CC belongs to',       isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre',      dataType: 'VARCHAR', description: 'Default profit centre assignment (PRCTR)',         isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'is_active',          dataType: 'BOOLEAN', description: 'Whether the cost centre is currently active',      isKey: false, responsibilityType: 'none' }
         ]
       },
       {
@@ -589,6 +614,229 @@
           { name: 'calendar_month',        dataType: 'INT',     description: 'Gregorian calendar month (1–12)',                isKey: false, responsibilityType: 'none' },
           { name: 'is_closing_period',     dataType: 'BOOLEAN', description: 'True if this is a closing period (13–16)',       isKey: false, responsibilityType: 'none' },
           { name: 'is_open',               dataType: 'BOOLEAN', description: 'True if the period is open for posting',         isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── Cost Centre Flavours ──────────────────────────────
+      {
+        id: 'dim_investment_order', name: 'Investment / CapEx Order', category: 'why', icon: '🏗️',
+        description: 'SAP CO Investment Order (Auftragsar = investment measure) — collects CapEx spend prior to capitalisation on an asset under construction (AuC). Settlement receiver: fixed asset or AuC via FI-AA.',
+        columns: [
+          { name: 'inv_order_key',             dataType: 'UUID',    description: 'Surrogate key',                                         isKey: true,  responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — internal order number',                      isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'Order type code (AUART) — investment measure type',       isKey: false, responsibilityType: 'none' },
+          { name: 'order_description',         dataType: 'VARCHAR', description: 'Short text of the investment project',                   isKey: false, responsibilityType: 'none' },
+          { name: 'appropriation_request',     dataType: 'VARCHAR', description: 'Linked appropriation request (IMZO / IMPR) if used',     isKey: false, responsibilityType: 'none' },
+          { name: 'auc_asset_number',          dataType: 'VARCHAR', description: 'Asset Under Construction (AuC) number in FI-AA',         isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Cost centre responsible for the CapEx',                  isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Assigned profit centre',                                 isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'controlling_area',          dataType: 'VARCHAR', description: 'Controlling area (KOKRS)',                               isKey: false, responsibilityType: 'controlling_area' },
+          { name: 'planned_budget',            dataType: 'DECIMAL', description: 'Approved budget for this investment order',               isKey: false, responsibilityType: 'none' },
+          { name: 'capex_category',            dataType: 'VARCHAR', description: 'Category: Property | Plant & Equipment | IT | Leasehold Improvement | Other', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the order is open/released',                     isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_statistical_order', name: 'Statistical Internal Order', category: 'why', icon: '📊',
+        description: 'SAP Statistical Order — receives informational postings only (no real costs). Used as a secondary receiver alongside a real cost object (cost centre or real order) for sub-classification of spend without affecting settlement.',
+        columns: [
+          { name: 'stat_order_key',            dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — statistical order number',                   isKey: false, responsibilityType: 'none' },
+          { name: 'order_description',         dataType: 'VARCHAR', description: 'Short text describing reporting purpose',                isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'Order type code (AUART)',                                isKey: false, responsibilityType: 'none' },
+          { name: 'primary_cost_centre',       dataType: 'VARCHAR', description: 'Real cost object receiving the actual posting',          isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'controlling_area',          dataType: 'VARCHAR', description: 'Controlling area (KOKRS)',                               isKey: false, responsibilityType: 'controlling_area' },
+          { name: 'reporting_purpose',         dataType: 'VARCHAR', description: 'Why this statistical dimension exists (e.g. campaign, initiative, event)', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the order is active',                           isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── PS — Project System ───────────────────────────────
+      {
+        id: 'dim_ps_project', name: 'PS Project Definition', category: 'why', icon: '🗃️',
+        description: 'SAP PS Project Definition (PROJ / PSPID) — the top-level container for all WBS elements, networks and orders within a project. Drives CapEx, professional services, and R&D project tracking.',
+        columns: [
+          { name: 'project_key',               dataType: 'UUID',    description: 'Surrogate key',                                         isKey: true,  responsibilityType: 'none' },
+          { name: 'pspid',                     dataType: 'VARCHAR', description: 'SAP PSPID — project definition ID (PROJ.PSPID)',         isKey: false, responsibilityType: 'none' },
+          { name: 'project_name',              dataType: 'VARCHAR', description: 'Project short description',                              isKey: false, responsibilityType: 'none' },
+          { name: 'project_type',              dataType: 'VARCHAR', description: 'Project type (PRART): CapEx | R&D | Services | Maintenance | RE Renovation', isKey: false, responsibilityType: 'none' },
+          { name: 'project_manager',           dataType: 'VARCHAR', description: 'SAP VERNA — responsible project manager',               isKey: false, responsibilityType: 'project_manager' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Responsible cost centre (KOSTL)',                        isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Default profit centre',                                 isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'company_code',              dataType: 'VARCHAR', description: 'Assigned company code (BUKRS)',                          isKey: false, responsibilityType: 'company_code' },
+          { name: 'planned_start_date',        dataType: 'DATE',    description: 'Planned project start date',                            isKey: false, responsibilityType: 'none' },
+          { name: 'planned_end_date',          dataType: 'DATE',    description: 'Planned project finish date',                           isKey: false, responsibilityType: 'none' },
+          { name: 'project_status',            dataType: 'VARCHAR', description: 'User/system status: Created | Released | Technically Closed | Closed', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the project is currently active',               isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── PM — Plant Maintenance ────────────────────────────
+      {
+        id: 'dim_maintenance_plan', name: 'Maintenance Plan', category: 'how', icon: '🔧',
+        description: 'SAP PM Maintenance Plan (MHIS / MPLA) — defines the schedule for preventive maintenance: cycle, strategy, and task list. Generates maintenance orders automatically on the due date.',
+        columns: [
+          { name: 'maint_plan_key',            dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'plan_number',               dataType: 'VARCHAR', description: 'SAP MPLA.WAPL — maintenance plan number',               isKey: false, responsibilityType: 'none' },
+          { name: 'plan_description',          dataType: 'VARCHAR', description: 'Short text of the plan',                                isKey: false, responsibilityType: 'none' },
+          { name: 'plan_category',             dataType: 'VARCHAR', description: 'Single cycle | Strategy | Multiple counter plan',        isKey: false, responsibilityType: 'none' },
+          { name: 'maintenance_strategy',      dataType: 'VARCHAR', description: 'Strategy grouping cycle packages (e.g. annual, 6-month)', isKey: false, responsibilityType: 'none' },
+          { name: 'technical_object',          dataType: 'VARCHAR', description: 'Functional location or equipment assigned to plan',      isKey: false, responsibilityType: 'none' },
+          { name: 'planning_plant',            dataType: 'VARCHAR', description: 'SAP planning plant (SWERK)',                            isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_work_centre',   dataType: 'VARCHAR', description: 'Work centre responsible for execution',                  isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre',               dataType: 'VARCHAR', description: 'Cost centre bearing maintenance costs',                  isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'cycle_unit',                dataType: 'VARCHAR', description: 'Cycle unit: D=Days, M=Months, Y=Years',                 isKey: false, responsibilityType: 'none' },
+          { name: 'cycle_length',              dataType: 'INT',     description: 'Number of cycle units between maintenance calls',        isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the plan is active and scheduling',             isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_maintenance_order', name: 'Maintenance Order (PM)', category: 'why', icon: '🔩',
+        description: 'SAP PM Maintenance Order (AUFK / AFKO, order category 30) — created manually or automatically from a maintenance plan. Collects labour, material, and external service costs for a specific maintenance task.',
+        columns: [
+          { name: 'maint_order_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — maintenance order number',                   isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'PM order type (AUART): e.g. PM01=Corrective, PM02=Preventive', isKey: false, responsibilityType: 'none' },
+          { name: 'order_description',         dataType: 'VARCHAR', description: 'Short text of the maintenance task',                     isKey: false, responsibilityType: 'none' },
+          { name: 'maintenance_type',          dataType: 'VARCHAR', description: 'Corrective | Preventive | Condition-Based | Emergency',  isKey: false, responsibilityType: 'none' },
+          { name: 'functional_location',       dataType: 'VARCHAR', description: 'TPLNR — functional location or equipment number',        isKey: false, responsibilityType: 'none' },
+          { name: 'planning_plant',            dataType: 'VARCHAR', description: 'Plant where maintenance is planned',                     isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_work_centre',   dataType: 'VARCHAR', description: 'Main work centre for execution (ARBPL)',                 isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Cost centre absorbing costs',                           isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'source_maintenance_plan',   dataType: 'VARCHAR', description: 'Plan number that triggered this order (if preventive)',  isKey: false, responsibilityType: 'none' },
+          { name: 'order_status',              dataType: 'VARCHAR', description: 'Created | Released | In-Progress | Technically Completed | Closed', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the order is still open',                       isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_service_order', name: 'Service Order (CS)', category: 'why', icon: '🛠️',
+        description: 'SAP CS Service Order (AUFK, order category 40) — manages customer-facing repair, field service, and warranty work. Linked to service notification (QMEL) and drives billing via DP90 resource-related billing.',
+        columns: [
+          { name: 'service_order_key',         dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — service order number',                       isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'CS order type (AUART): e.g. SM01=Repair, SM02=Warranty', isKey: false, responsibilityType: 'none' },
+          { name: 'service_type',              dataType: 'VARCHAR', description: 'Repair | Warranty | Installation | Field Service | Consulting', isKey: false, responsibilityType: 'none' },
+          { name: 'customer',                  dataType: 'VARCHAR', description: 'Service recipient (KUNNR)',                              isKey: false, responsibilityType: 'none' },
+          { name: 'sold_to_party',             dataType: 'VARCHAR', description: 'Sold-to party (can differ from service recipient)',       isKey: false, responsibilityType: 'none' },
+          { name: 'service_notification',      dataType: 'VARCHAR', description: 'Source PM/CS notification number (QMNUM)',               isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Cost centre responsible for service delivery',           isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for service revenue recognition',          isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'billing_indicator',         dataType: 'VARCHAR', description: 'Billable | Warranty | Internal | Not Billable',          isKey: false, responsibilityType: 'none' },
+          { name: 'order_status',              dataType: 'VARCHAR', description: 'Created | Released | In-Progress | Completed | Settled', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the service order is open',                     isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── SD — Sales & Distribution ─────────────────────────
+      {
+        id: 'dim_sales_order', name: 'Sales Order (SD)', category: 'why', icon: '🧾',
+        description: 'SAP SD Sales Order (VBAK/VBAP) — the customer demand document. Drives picking, delivery, billing, and revenue recognition. Connects to CO-PA via VBAP profitability segment (PAOBJNR).',
+        columns: [
+          { name: 'sales_order_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'vbeln',                     dataType: 'VARCHAR', description: 'SAP VBELN — sales order number (VBAK.VBELN)',            isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'SAP AUART/AUART via VBAK.AUART: OR=Standard, ZOR=Custom, RE=Returns, CS=Consignment', isKey: false, responsibilityType: 'none' },
+          { name: 'sold_to_party',             dataType: 'VARCHAR', description: 'Sold-to customer (VBAK.KUNNR)',                          isKey: false, responsibilityType: 'none' },
+          { name: 'sales_organisation',        dataType: 'VARCHAR', description: 'Sales org (VKORG) — top of SD org structure',           isKey: false, responsibilityType: 'none' },
+          { name: 'distribution_channel',      dataType: 'VARCHAR', description: 'Vtweg — e.g. 10=Direct, 20=Retail',                     isKey: false, responsibilityType: 'none' },
+          { name: 'division',                  dataType: 'VARCHAR', description: 'SPART — product line / division',                       isKey: false, responsibilityType: 'none' },
+          { name: 'material',                  dataType: 'VARCHAR', description: 'MATNR — material/product on the order (item level)',     isKey: false, responsibilityType: 'none' },
+          { name: 'plant',                     dataType: 'VARCHAR', description: 'WERKS — delivering plant',                              isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre derived at item level (PRCTR)',            isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'order_status',              dataType: 'VARCHAR', description: 'Open | Partially Delivered | Fully Delivered | Invoiced | Cancelled', isKey: false, responsibilityType: 'none' },
+          { name: 'requested_delivery_date',   dataType: 'DATE',    description: 'Customer requested delivery date (VBAP.EDATU)',          isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_sd_contract', name: 'SD Contract / Outline Agreement', category: 'why', icon: '📜',
+        description: 'SAP SD Contract or Scheduling Agreement (VBAK with doc type KK/MK/WK) — a longer-term commitment with a customer defining quantities, prices, and conditions against which release orders are raised.',
+        columns: [
+          { name: 'contract_key',              dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'vbeln',                     dataType: 'VARCHAR', description: 'SAP VBELN — contract number (VBAK.VBELN)',               isKey: false, responsibilityType: 'none' },
+          { name: 'contract_type',             dataType: 'VARCHAR', description: 'KK=Quantity Contract, WK=Value Contract, MK=Scheduling Agreement, LP=Lease', isKey: false, responsibilityType: 'none' },
+          { name: 'sold_to_party',             dataType: 'VARCHAR', description: 'Contract partner — customer (KUNNR)',                    isKey: false, responsibilityType: 'none' },
+          { name: 'sales_organisation',        dataType: 'VARCHAR', description: 'Sales org (VKORG)',                                      isKey: false, responsibilityType: 'none' },
+          { name: 'contract_start_date',       dataType: 'DATE',    description: 'Contract validity start (VBKD.BSTDK)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'contract_end_date',         dataType: 'DATE',    description: 'Contract validity end (VBKD.BSTDK)',                     isKey: false, responsibilityType: 'none' },
+          { name: 'target_value',              dataType: 'DECIMAL', description: 'Total contract value (value contracts)',                  isKey: false, responsibilityType: 'none' },
+          { name: 'target_quantity',           dataType: 'DECIMAL', description: 'Total committed quantity (quantity contracts)',           isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for revenue tracking',                     isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'contract_status',           dataType: 'VARCHAR', description: 'Open | Partially Released | Completed | Cancelled',      isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the contract is within validity period',         isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── RE-FX — Flexible Real Estate ──────────────────────
+      {
+        id: 'dim_re_business_entity', name: 'RE Business Entity', category: 'where', icon: '🏙️',
+        description: 'SAP RE-FX Business Entity (Geschäftseinheit / VIOB00) — the top-level real estate object grouping all properties, buildings, and rental units in an administrative portfolio. Typically represents a geographic or legal portfolio.',
+        columns: [
+          { name: 're_entity_key',             dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
+          { name: 'recnnr',                    dataType: 'VARCHAR', description: 'SAP RE object number (VIOB00.RECNNR)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'entity_description',        dataType: 'VARCHAR', description: 'Short text of the business entity',                     isKey: false, responsibilityType: 'none' },
+          { name: 'company_code',              dataType: 'VARCHAR', description: 'Owning company code (BUKRS)',                            isKey: false, responsibilityType: 'company_code' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Default profit centre for the entity',                  isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'responsible_person',        dataType: 'VARCHAR', description: 'Portfolio or entity manager',                           isKey: false, responsibilityType: 'budget_holder' },
+          { name: 'portfolio_type',            dataType: 'VARCHAR', description: 'Commercial | Residential | Industrial | Mixed | Retail', isKey: false, responsibilityType: 'none' },
+          { name: 'country',                   dataType: 'VARCHAR', description: 'Country of the entity (ISO 2-letter)',                  isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the entity is active in the portfolio',         isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_re_building', name: 'RE Building', category: 'where', icon: '🏢',
+        description: 'SAP RE-FX Building (Gebäude / VIOB20) — a physical structure within a property. Buildings contain rental units and are the primary level for maintenance cost assignment, insurance, and structural capex.',
+        columns: [
+          { name: 're_building_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
+          { name: 'recnnr',                    dataType: 'VARCHAR', description: 'SAP RE object number (VIOB20.RECNNR)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'building_description',      dataType: 'VARCHAR', description: 'Short description of the building',                     isKey: false, responsibilityType: 'none' },
+          { name: 'business_entity',           dataType: 'VARCHAR', description: 'Parent business entity reference',                      isKey: false, responsibilityType: 're_object' },
+          { name: 'street_address',            dataType: 'VARCHAR', description: 'Physical street address',                               isKey: false, responsibilityType: 'none' },
+          { name: 'city',                      dataType: 'VARCHAR', description: 'City',                                                  isKey: false, responsibilityType: 'none' },
+          { name: 'country',                   dataType: 'VARCHAR', description: 'Country (ISO 2-letter)',                                isKey: false, responsibilityType: 'none' },
+          { name: 'gross_area',                dataType: 'DECIMAL', description: 'Total gross floor area (m² or ft²)',                    isKey: false, responsibilityType: 'none' },
+          { name: 'net_rentable_area',         dataType: 'DECIMAL', description: 'Net lettable area (NLA) available for tenants',         isKey: false, responsibilityType: 'none' },
+          { name: 'area_uom',                  dataType: 'VARCHAR', description: 'Unit of measure: M2 or FT2',                           isKey: false, responsibilityType: 'none' },
+          { name: 'year_of_construction',      dataType: 'INT',     description: 'Year the building was completed',                       isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre',               dataType: 'VARCHAR', description: 'RE cost centre for service charge and maintenance costs', isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for rental income recognition',           isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the building is active in the portfolio',       isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_re_rental_unit', name: 'RE Rental Unit', category: 'where', icon: '🚪',
+        description: 'SAP RE-FX Rental Unit (Mieteinheit / VIOB40) — the smallest separately lettable space within a building. Rental units are the primary object for lease agreements, rent schedules, and vacancy tracking.',
+        columns: [
+          { name: 're_unit_key',               dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
+          { name: 'recnnr',                    dataType: 'VARCHAR', description: 'SAP RE object number (VIOB40.RECNNR)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'unit_description',          dataType: 'VARCHAR', description: 'Short description of the rental unit',                  isKey: false, responsibilityType: 'none' },
+          { name: 're_building',               dataType: 'VARCHAR', description: 'Parent building reference',                             isKey: false, responsibilityType: 're_object' },
+          { name: 'business_entity',           dataType: 'VARCHAR', description: 'Parent business entity reference',                      isKey: false, responsibilityType: 're_object' },
+          { name: 'unit_type',                 dataType: 'VARCHAR', description: 'Office | Retail | Warehouse | Residential | Parking | Storage', isKey: false, responsibilityType: 'none' },
+          { name: 'usable_area',               dataType: 'DECIMAL', description: 'Lettable floor area',                                   isKey: false, responsibilityType: 'none' },
+          { name: 'area_uom',                  dataType: 'VARCHAR', description: 'Area unit: M2 or FT2',                                 isKey: false, responsibilityType: 'none' },
+          { name: 'floor_number',              dataType: 'INT',     description: 'Floor within the building',                             isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre assigned to the unit',                    isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'occupancy_status',          dataType: 'VARCHAR', description: 'Occupied | Vacant | Under Refurbishment | Owner Occupied', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the unit is active in the portfolio',           isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_re_rental_agreement', name: 'RE Rental/Lease Agreement', category: 'why', icon: '📝',
+        description: 'SAP RE-FX Rental Agreement (Mietvertrag / VIAUFNR / VIRE00) — the lease contract between landlord and tenant. Drives periodic rent posting, indexation, option management, and security deposit tracking. In S/4 RE-FX, IFRS 16 right-of-use asset calculations are embedded.',
+        columns: [
+          { name: 're_agreement_key',          dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
+          { name: 'recnnr',                    dataType: 'VARCHAR', description: 'SAP RE contract number (VIRE00.RECNNR)',                 isKey: false, responsibilityType: 'none' },
+          { name: 'agreement_description',     dataType: 'VARCHAR', description: 'Short text of the rental agreement',                    isKey: false, responsibilityType: 'none' },
+          { name: 'agreement_type',            dataType: 'VARCHAR', description: 'RE-FX: Commercial Lease | Residential | Ground Lease | Car Park | IFRS16 Lessee', isKey: false, responsibilityType: 'none' },
+          { name: 'tenant',                    dataType: 'VARCHAR', description: 'Business Partner number of the tenant (BUT000)',         isKey: false, responsibilityType: 'none' },
+          { name: 're_rental_unit',            dataType: 'VARCHAR', description: 'Assigned rental unit (VIOB40)',                         isKey: false, responsibilityType: 're_object' },
+          { name: 'lease_start_date',          dataType: 'DATE',    description: 'Lease commencement date',                               isKey: false, responsibilityType: 'none' },
+          { name: 'lease_end_date',            dataType: 'DATE',    description: 'Lease expiry date (may include break clauses)',          isKey: false, responsibilityType: 'none' },
+          { name: 'base_rent',                 dataType: 'DECIMAL', description: 'Periodic base rent amount',                             isKey: false, responsibilityType: 'none' },
+          { name: 'rent_currency',             dataType: 'VARCHAR', description: 'Currency of rent obligation',                           isKey: false, responsibilityType: 'none' },
+          { name: 'indexation_type',           dataType: 'VARCHAR', description: 'CPI-linked | Fixed Step | Market Review | None',        isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for rental income / lease expense',       isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'agreement_status',          dataType: 'VARCHAR', description: 'Active | Expired | Terminated | Notice Given | Draft', isKey: false, responsibilityType: 'none' },
+          { name: 'is_ifrs16',                 dataType: 'BOOLEAN', description: 'True if this lease is in scope for IFRS 16 ROU accounting', isKey: false, responsibilityType: 'none' }
         ]
       }
     ];
