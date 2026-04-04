@@ -1660,3 +1660,92 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* ─────────────────────────────────────────────
+   SAP Migration Status Badges
+───────────────────────────────────────────── */
+.sap-status-badge {
+  display: inline-block; padding: 1px 5px; border-radius: 8px;
+  font-size: 10px; font-weight: 700; white-space: nowrap; line-height: 1.6;
+}
+
+/* ─────────────────────────────────────────────
+   SAP Technical Reference (matrix notes-row)
+───────────────────────────────────────────── */
+.sap-tech-ref {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.sap-tech-ref-header {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+}
+.sap-tech-ref-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;
+}
+.sap-tech-ref-grid label {
+  font-size: 11px; color: var(--text-muted);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.sap-tech-ref-grid input, .sap-tech-ref-grid select {
+  font-size: 11px; padding: 3px 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--text);
+}
+.sap-tech-ref-grid input:focus, .sap-tech-ref-grid select:focus {
+  outline: none; border-color: var(--primary);
+}
+
+/* ─────────────────────────────────────────────
+   SAP Migration View
+───────────────────────────────────────────── */
+.sap-coverage-bar {
+  height: 8px; background: var(--border); border-radius: 4px;
+  overflow: hidden; margin: 6px 0 16px;
+}
+.sap-coverage-fill { height: 100%; background: #065f46; border-radius: 4px; transition: width 0.3s; }
+
+.sap-table-ref { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+.sap-table-ref th {
+  background: #1c1c28; color: #e0e0f0; padding: 8px 10px;
+  font-size: 11px; font-weight: 500; text-align: left;
+}
+.sap-table-ref td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.sap-table-ref tbody tr:hover td { background: var(--bg-card); }
+.sap-table-ref .ecc-col { font-family: 'Fira Code', monospace; font-size: 11px; font-weight: 600; color: #9a3412; }
+.sap-table-ref .s4-col  { font-family: 'Fira Code', monospace; font-size: 11px; font-weight: 600; color: #065f46; }
+.sap-table-ref .note-col { font-size: 11px; color: var(--text-muted); }
+
+.sap-field-grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sap-field-grid th {
+  background: var(--surface); padding: 6px 8px; font-size: 11px;
+  font-weight: 600; color: var(--text-muted); border-bottom: 2px solid var(--border); text-align: left;
+}
+.sap-field-grid td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.sap-field-grid tbody tr:hover td { background: var(--bg-card); cursor: pointer; }
+.sap-field-grid .field-name { font-family: 'Fira Code', monospace; font-size: 11px; }
+.sap-field-grid .sap-ref { font-family: 'Fira Code', monospace; font-size: 10px; color: var(--text-muted); }
+
+.sap-stat-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+.sap-stat-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; text-align: center;
+}
+.sap-stat-card .stat-value { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.sap-stat-card .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.sap-event-breakdown { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+.sap-event-breakdown th {
+  background: var(--surface); padding: 6px 10px; font-size: 11px;
+  font-weight: 600; color: var(--text-muted); border-bottom: 2px solid var(--border); text-align: left;
+}
+.sap-event-breakdown td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.sap-event-breakdown tbody tr:hover td { background: var(--bg-card); }
+
+.sap-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.sap-filter-btn {
+  padding: 4px 12px; font-size: 12px; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--bg); color: var(--text-muted); cursor: pointer;
+}
+.sap-filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+.sap-filter-btn:hover:not(.active) { background: var(--surface); }

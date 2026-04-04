@@ -213,12 +213,12 @@ const Matrix = {
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
             onclick="Matrix.deleteRow('${col.id}')">✕</button>
-          <button class="btn-icon" title="${col.notes || col.formula ? 'Has notes' : 'Add notes'}"
-            style="font-size:11px;opacity:${col.notes || col.formula ? '1' : '0.4'};color:${col.notes || col.formula ? 'var(--primary)' : 'inherit'}"
+          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable ? 'Has notes/SAP ref' : 'Add notes'}"
+            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable ? 'var(--primary)' : 'inherit'}"
             onclick="Matrix._toggleNotes('${col.id}')">✎</button>
         </td>
       </tr>
-      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula ? 'table-row' : 'none'}">
+      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField ? 'table-row' : 'none'}">
         <td colspan="2"></td>
         <td colspan="6" style="padding:4px 8px 8px">
           <div style="display:flex;gap:8px">
@@ -236,6 +236,48 @@ const Matrix = {
                 onblur="Matrix.updateField('${col.id}', 'formula', this.value)">${this._esc(col.formula || '')}</textarea>
             </div>` : ''}
           </div>
+          ${(col.source === 'sap_ecc' || col.source === 'sap_s4') ? `
+          <div class="sap-tech-ref">
+            <div class="sap-tech-ref-header">SAP Technical Reference</div>
+            <div class="sap-tech-ref-grid">
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">SAP TABLE</div>
+                <input list="sap-table-list-${col.id}" class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.sapTable || '')}" placeholder="e.g. ACDOCA"
+                  onblur="Matrix.updateField('${col.id}', 'sapTable', this.value)">
+                <datalist id="sap-table-list-${col.id}">
+                  <option value="ACDOCA"><option value="BSEG"><option value="BKPF">
+                  <option value="COEP"><option value="COSP"><option value="COSS">
+                  <option value="CE1XXXX"><option value="ANLP"><option value="KNA1">
+                  <option value="LFA1"><option value="MARA"><option value="CSKS"><option value="CEPC">
+                </datalist>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">SAP FIELD</div>
+                <input class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.sapField || '')}" placeholder="e.g. DMBTR"
+                  onblur="Matrix.updateField('${col.id}', 'sapField', this.value)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">MIGRATION STATUS</div>
+                <select class="cell-input" style="width:100%;font-size:12px"
+                  onchange="Matrix.updateField('${col.id}', 'sapMigrationStatus', this.value)">
+                  ${typeof SAP_MIGRATION_STATUSES !== 'undefined'
+                    ? Object.entries(SAP_MIGRATION_STATUSES).map(([k, s]) =>
+                        `<option value="${k}" ${(col.sapMigrationStatus || '') === k ? 'selected' : ''}>${s.label}</option>`
+                      ).join('')
+                    : ''}
+                </select>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">${col.category === 'how_many' ? 'CO-PA VALUE FIELD' : 'CO-PA CHARACTERISTIC'}</div>
+                <input class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || ''))}"
+                  placeholder="${col.category === 'how_many' ? 'e.g. VVB01' : 'e.g. WW001'}"
+                  onblur="Matrix.updateField('${col.id}', '${col.category === 'how_many' ? 'copaValueField' : 'copaCharacteristic'}', this.value)">
+              </div>
+            </div>
+          </div>` : ''}
         </td>
         <td colspan="2"></td>
       </tr>

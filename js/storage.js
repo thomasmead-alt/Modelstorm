@@ -58,6 +58,12 @@ const Storage = {
           if (col.scdType === undefined) col.scdType = null;
           if (col.isNaturalKey === undefined) col.isNaturalKey = false;
           if (col.isSurrogateKey === undefined) col.isSurrogateKey = false;
+          // SAP FI/CO migration fields
+          if (!col.sapTable)           col.sapTable = '';
+          if (!col.sapField)           col.sapField = '';
+          if (!col.sapMigrationStatus) col.sapMigrationStatus = '';
+          if (!col.copaCharacteristic) col.copaCharacteristic = '';
+          if (!col.copaValueField)     col.copaValueField = '';
           return col;
         });
         return e;

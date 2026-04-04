@@ -112,6 +112,15 @@
         <span class="nav-label">ML Opportunities</span>
       </a>
 
+      <a class="nav-item" data-section="sap-migration" data-tip="SAP Migration" href="#sap-migration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span class="nav-label">SAP Migration</span>
+      </a>
+
       <div class="nav-section-label">Help</div>
 
       <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
@@ -179,6 +188,7 @@
   <script src="js/cashflow.js"></script>
   <script src="js/mlanalysis.js"></script>
   <script src="js/ddlgen.js"></script>
+  <script src="js/sapmigration.js"></script>
 
   <script>
     // ─── Global constants: event grain levels ─────────────
@@ -188,7 +198,8 @@
       weekly:      { label: 'Weekly',      short: 'WK',  description: 'Aggregated to one row per week', color: '#8b5cf6', bg: '#f5f3ff' },
       monthly:     { label: 'Monthly',     short: 'MTH', description: 'Aggregated to one row per fiscal period/month', color: '#f59e0b', bg: '#fffbeb' },
       quarterly:   { label: 'Quarterly',   short: 'QTR', description: 'Aggregated to one row per quarter', color: '#10b981', bg: '#ecfdf5' },
-      annual:      { label: 'Annual',      short: 'YR',  description: 'Aggregated to one row per financial year', color: '#e85d04', bg: '#fff7ed' }
+      annual:      { label: 'Annual',        short: 'YR',  description: 'Aggregated to one row per financial year', color: '#e85d04', bg: '#fff7ed' },
+      fiscal_period: { label: 'Fiscal Period', short: 'FP',  description: 'SAP posting period + fiscal year — one row per period (e.g. Period 001 FY2025). Supports up to 16 periods including closing periods.', color: '#065f46', bg: '#d1fae5' }
     };
 
     // ─── Global constants: measure additivity types ────────
@@ -219,7 +230,9 @@
       cost_centre:   { label: 'Cost Centre',    description: 'Organisational unit that incurs costs and holds budget authority', color: '#7c3aed' },
       profit_centre: { label: 'Profit Centre',  description: 'Business unit or product line with P&L ownership', color: '#0891b2' },
       budget_holder: { label: 'Budget Holder',  description: 'Person or role responsible for approving and controlling spend against a budget', color: '#059669' },
-      org_hierarchy: { label: 'Org Hierarchy',  description: 'Part of an organisational tree — has parent/child relationships with other members', color: '#d97706' }
+      org_hierarchy:    { label: 'Org Hierarchy',    description: 'Part of an organisational tree — has parent/child relationships with other members', color: '#d97706' },
+      company_code:     { label: 'Company Code',     description: 'SAP Company Code — legal entity with self-contained financial accounting (Buchungskreis)', color: '#1d4ed8' },
+      controlling_area: { label: 'Controlling Area', description: 'SAP Controlling Area — management accounting scope spanning one or more company codes (Kostenrechnungskreis)', color: '#7c3aed' }
     };
 
     // ─── Global constants: default P&L line structure ──────
@@ -299,6 +312,30 @@
       3: { label: 'Type 3 — Previous',short: 'SCD3', description: 'Add a "previous_value" column — one prior version retained',                         color: '#059669' },
       6: { label: 'Type 6 — Hybrid',  short: 'SCD6', description: 'Combines Type 1 + 2 + 3: current value overwritten + history rows + previous column', color: '#d97706' }
     };
+
+    // ─── Global constants: SAP migration status ───────────
+    const SAP_MIGRATION_STATUSES = {
+      '':         { label: 'Untagged',   short: '—',    color: '#9ca3af', bg: '#f3f4f6', description: 'Migration status not yet assessed' },
+      both:       { label: 'Both',       short: 'BOTH', color: '#166534', bg: '#dcfce7', description: 'Field/table available in both ECC and S/4HANA' },
+      ecc_only:   { label: 'ECC Only',   short: 'ECC',  color: '#9a3412', bg: '#fff7ed', description: 'ECC source table/field — no direct S/4HANA equivalent; requires mapping or transformation' },
+      s4_only:    { label: 'S/4 Only',   short: 'S/4',  color: '#065f46', bg: '#d1fae5', description: 'New in S/4HANA (e.g. ACDOCA field) — not present in ECC; enrichment opportunity' },
+      changed:    { label: 'Changed',    short: 'CHG',  color: '#92400e', bg: '#fef3c7', description: 'Field exists in both but table, semantics, or data type changed in S/4HANA' },
+      deprecated: { label: 'Deprecated', short: 'DEP',  color: '#7f1d1d', bg: '#fee2e2', description: 'SAP deprecated this field or table — retire from data model before go-live' }
+    };
+
+    // ─── Global constants: ECC → S/4HANA table map ────────
+    const ECC_TO_S4_TABLE_MAP = [
+      { eccTable: 'BKPF',     s4Table: 'ACDOCA',                description: 'FI Document Header',              note: 'Header + line items merged into Universal Journal. BKPF still exists but is redundant.' },
+      { eccTable: 'BSEG',     s4Table: 'ACDOCA',                description: 'FI Document Line Items',           note: 'Key ECC table retired as primary source. All FI postings now stored in ACDOCA.' },
+      { eccTable: 'COEP',     s4Table: 'ACDOCA',                description: 'CO Line Items — Actual',           note: 'CO actuals merged into Universal Journal. Use ACDOCA + CDS views.' },
+      { eccTable: 'COSP',     s4Table: 'ACDOCA (derived)',       description: 'CO Object Cost Totals',            note: 'Period totals tables retired. Query ACDOCA directly or use CDS aggregate views.' },
+      { eccTable: 'COSS',     s4Table: 'ACDOCA (derived)',       description: 'CO Object Activity Totals',        note: 'Summary tables retired. Query ACDOCA directly.' },
+      { eccTable: 'CE1XXXX',  s4Table: 'ACDOCA',                description: 'CO-PA Line Items (Costing-Based)', note: 'Account-based CO-PA is primary in S/4. Costing-based CO-PA deprecated.' },
+      { eccTable: 'ANLP',     s4Table: 'ACDOCA',                description: 'Asset Depreciation (FI-AA)',       note: 'New Asset Accounting engine posts depreciation directly to Universal Journal.' },
+      { eccTable: 'MLHD/MLIT',s4Table: 'ACDOCA',                description: 'Material Ledger Documents',        note: 'Material Ledger mandatory in S/4. Actual costing documents posted to ACDOCA.' },
+      { eccTable: 'KNA1',     s4Table: 'BUT000 (Business Partner)', description: 'Customer Master',             note: 'Business Partner (BP) concept replaces separate Customer and Vendor master records.' },
+      { eccTable: 'LFA1',     s4Table: 'BUT000 (Business Partner)', description: 'Vendor Master',              note: 'Business Partner (BP) concept replaces separate Customer and Vendor master records.' },
+    ];
 
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
@@ -441,6 +478,118 @@
           { name: 'fiscal_year',     dataType: 'VARCHAR', description: 'Fiscal year this version covers',    isKey: false, responsibilityType: 'none' },
           { name: 'is_current',      dataType: 'BOOLEAN', description: 'True if this is the active version', isKey: false, responsibilityType: 'none' }
         ]
+      },
+      // ── SAP FI/CO Dimensions ──────────────────────────────────
+      {
+        id: 'dim_company_code', name: 'Company Code', category: 'where', icon: '🏛️',
+        description: 'SAP Company Code (Bukrs) — the legal entity with self-contained financial accounting. Central organisational unit in FI.',
+        columns: [
+          { name: 'company_code_key',      dataType: 'UUID',    description: 'Surrogate key',                             isKey: true,  responsibilityType: 'company_code' },
+          { name: 'bukrs',                 dataType: 'VARCHAR', description: 'SAP BUKRS — 4-character company code',       isKey: false, responsibilityType: 'none' },
+          { name: 'company_name',          dataType: 'VARCHAR', description: 'Full legal entity name',                    isKey: false, responsibilityType: 'none' },
+          { name: 'country',               dataType: 'VARCHAR', description: 'Country key (ISO 2-letter)',                 isKey: false, responsibilityType: 'none' },
+          { name: 'local_currency',        dataType: 'VARCHAR', description: 'Local (company code) currency key',          isKey: false, responsibilityType: 'none' },
+          { name: 'chart_of_accounts',     dataType: 'VARCHAR', description: 'Assigned chart of accounts (e.g. INT)',      isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_year_variant',   dataType: 'VARCHAR', description: 'e.g. K4=Calendar year, V3=Apr–Mar',          isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area',      dataType: 'VARCHAR', description: 'Assigned controlling area (KOKRS)',           isKey: false, responsibilityType: 'controlling_area' }
+        ]
+      },
+      {
+        id: 'dim_controlling_area', name: 'Controlling Area', category: 'where', icon: '🎛️',
+        description: 'SAP Controlling Area (Kostenrechnungskreis / KOKRS) — the management accounting scope that can span one or more company codes.',
+        columns: [
+          { name: 'controlling_area_key',        dataType: 'UUID',    description: 'Surrogate key',                              isKey: true,  responsibilityType: 'controlling_area' },
+          { name: 'kokrs',                       dataType: 'VARCHAR', description: 'SAP KOKRS — 4-character controlling area',    isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area_name',       dataType: 'VARCHAR', description: 'Full name of controlling area',               isKey: false, responsibilityType: 'none' },
+          { name: 'co_currency',                 dataType: 'VARCHAR', description: 'Controlling area currency',                   isKey: false, responsibilityType: 'none' },
+          { name: 'chart_of_accounts',           dataType: 'VARCHAR', description: 'Assigned chart of accounts',                  isKey: false, responsibilityType: 'none' },
+          { name: 'std_cost_centre_hierarchy',   dataType: 'VARCHAR', description: 'Standard cost centre hierarchy root node',    isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_profit_centre', name: 'Profit Centre', category: 'where', icon: '💰',
+        description: 'SAP Profit Centre (PRCTR) — internal reporting unit within the controlling area, typically aligned to IFRS 8 operating segments.',
+        columns: [
+          { name: 'profit_centre_key',    dataType: 'UUID',    description: 'Surrogate key',                            isKey: true,  responsibilityType: 'profit_centre' },
+          { name: 'prctr',               dataType: 'VARCHAR', description: 'SAP PRCTR — profit centre code',            isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre_name',  dataType: 'VARCHAR', description: 'Full name of profit centre',                isKey: false, responsibilityType: 'none' },
+          { name: 'profit_centre_group', dataType: 'VARCHAR', description: 'Hierarchy group (EC-PCA node)',              isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area',    dataType: 'VARCHAR', description: 'Owning controlling area (KOKRS)',            isKey: false, responsibilityType: 'controlling_area' },
+          { name: 'responsible_person',  dataType: 'VARCHAR', description: 'Named budget holder / P&L owner',           isKey: false, responsibilityType: 'budget_holder' },
+          { name: 'segment',             dataType: 'VARCHAR', description: 'IFRS 8 operating segment assignment',        isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',           dataType: 'BOOLEAN', description: 'Whether profit centre is currently active',  isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_cost_element', name: 'Cost Element', category: 'what', icon: '🧮',
+        description: 'SAP Cost Element (KSTAR / HKONT) — classifies costs and revenues in CO. Primary cost elements map 1:1 to G/L accounts; secondary are CO-internal.',
+        columns: [
+          { name: 'cost_element_key',    dataType: 'UUID',    description: 'Surrogate key',                                       isKey: true,  responsibilityType: 'none' },
+          { name: 'kstar',               dataType: 'VARCHAR', description: 'SAP KSTAR / HKONT — cost element or G/L number',       isKey: false, responsibilityType: 'none' },
+          { name: 'cost_element_name',   dataType: 'VARCHAR', description: 'Short text description of cost element',               isKey: false, responsibilityType: 'none' },
+          { name: 'ce_category',         dataType: 'VARCHAR', description: '1=Primary costs, 11=Revenues, 21=Settlement, 43=Overhead', isKey: false, responsibilityType: 'none' },
+          { name: 'cost_element_group',  dataType: 'VARCHAR', description: 'Cost element group for reporting hierarchy',           isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area',    dataType: 'VARCHAR', description: 'Owning controlling area (KOKRS)',                      isKey: false, responsibilityType: 'controlling_area' },
+          { name: 'is_primary',          dataType: 'BOOLEAN', description: 'True=external cost (maps to G/L); False=internal allocation', isKey: false, responsibilityType: 'none' },
+          { name: 'is_revenue_element',  dataType: 'BOOLEAN', description: 'True if category 11 (revenue element)',               isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_wbs_element', name: 'WBS Element', category: 'where', icon: '🗂️',
+        description: 'SAP Work Breakdown Structure Element (POSID) — hierarchical project structure node used for CapEx tracking, project controlling, and settlement.',
+        columns: [
+          { name: 'wbs_key',                   dataType: 'UUID',    description: 'Surrogate key',                           isKey: true,  responsibilityType: 'none' },
+          { name: 'posid',                     dataType: 'VARCHAR', description: 'SAP POSID — WBS element identifier',      isKey: false, responsibilityType: 'none' },
+          { name: 'wbs_description',           dataType: 'VARCHAR', description: 'Description of the WBS element',          isKey: false, responsibilityType: 'none' },
+          { name: 'project_definition',        dataType: 'VARCHAR', description: 'Root project definition (PROJ PSPID)',     isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Responsible cost centre',                 isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Assigned profit centre',                  isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'wbs_level',                 dataType: 'INT',     description: 'Hierarchy level — 1=top of project',      isKey: false, responsibilityType: 'none' },
+          { name: 'is_account_assignment',     dataType: 'BOOLEAN', description: 'True if costs can be posted directly',    isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_internal_order', name: 'Internal Order', category: 'why', icon: '📋',
+        description: 'SAP Internal Order (AUFNR) — used to collect and monitor costs for a specific purpose (CapEx, marketing campaigns, maintenance). Settled to cost centres, WBS, or assets.',
+        columns: [
+          { name: 'order_key',                 dataType: 'UUID',    description: 'Surrogate key',                              isKey: true,  responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — internal order number',           isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'Order type (e.g. CapEx, Maintenance, Marketing)', isKey: false, responsibilityType: 'none' },
+          { name: 'order_description',         dataType: 'VARCHAR', description: 'Short text description of order',             isKey: false, responsibilityType: 'none' },
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Responsible cost centre for the order',       isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Assigned profit centre',                      isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'settlement_rule',           dataType: 'VARCHAR', description: 'Settlement receiver type (Cost Centre / WBS / Asset)', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the order is currently released/active', isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_activity_type', name: 'Activity Type', category: 'how', icon: '⚙️',
+        description: 'SAP Activity Type (LSTAR) — defines the type of work performed by a cost centre (e.g. machine hours, labour hours). Used for internal activity allocation and overhead absorption.',
+        columns: [
+          { name: 'activity_type_key',         dataType: 'UUID',    description: 'Surrogate key',                                  isKey: true,  responsibilityType: 'none' },
+          { name: 'lstar',                     dataType: 'VARCHAR', description: 'SAP LSTAR — activity type code',                  isKey: false, responsibilityType: 'none' },
+          { name: 'activity_type_name',        dataType: 'VARCHAR', description: 'Description of activity type',                    isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre',               dataType: 'VARCHAR', description: 'Cost centre that provides this activity',         isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'activity_uom',              dataType: 'VARCHAR', description: 'Unit of measure: H=Hours, PC=Pieces, MIN=Minutes', isKey: false, responsibilityType: 'none' },
+          { name: 'allocation_cost_element',   dataType: 'VARCHAR', description: 'Secondary cost element used for the allocation',   isKey: false, responsibilityType: 'none' },
+          { name: 'controlling_area',          dataType: 'VARCHAR', description: 'Owning controlling area (KOKRS)',                  isKey: false, responsibilityType: 'controlling_area' }
+        ]
+      },
+      {
+        id: 'dim_sap_fiscal_calendar', name: 'SAP Fiscal Calendar', category: 'when', icon: '📅',
+        description: 'SAP posting period calendar — one row per fiscal period (posting period + fiscal year). Supports up to 16 periods including special closing periods 13–16.',
+        columns: [
+          { name: 'period_key',            dataType: 'INT',     description: 'Surrogate key: YYYYPPP format (e.g. 2024001)',  isKey: true,  responsibilityType: 'none' },
+          { name: 'fiscal_year',           dataType: 'VARCHAR', description: 'SAP GJAHR — fiscal year (e.g. 2024)',           isKey: false, responsibilityType: 'none' },
+          { name: 'posting_period',        dataType: 'INT',     description: 'SAP MONAT — posting period 1–16',               isKey: false, responsibilityType: 'none' },
+          { name: 'period_name',           dataType: 'VARCHAR', description: 'Human-readable label (e.g. Jan-2024)',           isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_year_variant',   dataType: 'VARCHAR', description: 'Variant driving period dates (e.g. K4, V3)',     isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_quarter',        dataType: 'VARCHAR', description: 'Fiscal quarter label (Q1–Q4)',                   isKey: false, responsibilityType: 'none' },
+          { name: 'calendar_year',         dataType: 'INT',     description: 'Gregorian calendar year',                        isKey: false, responsibilityType: 'none' },
+          { name: 'calendar_month',        dataType: 'INT',     description: 'Gregorian calendar month (1–12)',                isKey: false, responsibilityType: 'none' },
+          { name: 'is_closing_period',     dataType: 'BOOLEAN', description: 'True if this is a closing period (13–16)',       isKey: false, responsibilityType: 'none' },
+          { name: 'is_open',               dataType: 'BOOLEAN', description: 'True if the period is open for posting',         isKey: false, responsibilityType: 'none' }
+        ]
       }
     ];
 
@@ -466,6 +615,20 @@
         formatHint: 'Name the reference table and key in the Description. Populate "Format / Examples" with typical lookup values.',
         color: '#1e40af',
         bg: '#eff6ff'
+      },
+      sap_ecc: {
+        label: 'SAP ECC',
+        description: 'Field sourced from SAP ERP Central Component (ECC) — reference the SAP table (e.g. BSEG, COEP) and field name in the Technical Reference below.',
+        formatHint: 'Enter the SAP table and field name in the Technical Reference section (e.g. BSEG.HKONT). Note SAP migration status.',
+        color: '#1b6ca8',
+        bg: '#dbeafe'
+      },
+      sap_s4: {
+        label: 'SAP S/4HANA',
+        description: 'Field sourced from SAP S/4HANA — typically from ACDOCA (Universal Journal) or an S/4-native CDS view or Fiori OData API.',
+        formatHint: 'Enter the ACDOCA field or CDS view reference in the Technical Reference section (e.g. ACDOCA.DMBTR).',
+        color: '#065f46',
+        bg: '#d1fae5'
       }
     };
 
@@ -628,6 +791,8 @@
     Router.register('ml-opportunities',       ()       => MLAnalysis.renderProjectPicker());
     Router.register('ml-opportunities/:id',   ({ id }) => MLAnalysis.render(id));
     Router.register('ddl/:id',                ({ id }) => DDLGen.render(id));
+    Router.register('sap-migration',          ()       => SapMigration.renderProjectPicker());
+    Router.register('sap-migration/:id',      ({ id }) => SapMigration.render(id));
     Router.register('recents',  () => renderRecents());
     Router.register('guide',    () => renderGuide());
     Router.register('settings', () => renderSettings());
@@ -894,6 +1059,95 @@
         Storage.saveProject(migrated);
       }
       showToast('Example project loaded.');
+      Router.navigate(`project/${project.id}`);
+    }
+
+    // ─── Load SAP FI/CO example project ───────────────────
+    function loadSapExample() {
+      const existing = Storage.load().projects.find(p => p.name === 'SAP FI/CO Analytics Bridge');
+      if (existing) { Router.navigate(`project/${existing.id}`); return; }
+
+      const id = () => Storage.generateId();
+
+      const project = {
+        id: id(),
+        name: 'SAP FI/CO Analytics Bridge',
+        description: 'Universal Journal analytics model for ECC→S/4HANA migration. Covers FI journal entries, CO-PA profitability lines, and cost centre allocations using BEAM methodology.',
+        createdAt: new Date().toISOString(),
+        events: [
+          // ── Event 1: FI Journal Entry Posting ─────────────
+          {
+            id: id(),
+            name: 'FI Journal Entry Posting',
+            description: 'An FI document is posted to the general ledger — capturing a debit/credit pair against a G/L account. ECC source: BKPF/BSEG. S/4 source: ACDOCA (Universal Journal).',
+            columns: [
+              { id: id(), name: 'Company Code',      category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Legal entity (Buchungskreis)',           notes: 'BKPF.BUKRS / ACDOCA.RBUKRS', sapTable: 'BKPF', sapField: 'BUKRS', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Controlling Area',  category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Management accounting scope (KOKRS)',    notes: 'BSEG.KOKRS / ACDOCA.KOKRS', sapTable: 'BSEG', sapField: 'KOKRS', sapMigrationStatus: 'both' },
+              { id: id(), name: 'G/L Account',       category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'General ledger account (HKONT)',         notes: 'BSEG.HKONT / ACDOCA.RACCT', sapTable: 'BSEG', sapField: 'HKONT', sapMigrationStatus: 'both', copaCharacteristic: 'WW001' },
+              { id: id(), name: 'Cost Element',      category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO cost element (KSTAR)',                notes: 'COEP.KSTAR — merged into ACDOCA.RACCT in S/4', sapTable: 'COEP', sapField: 'KSTAR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Posting Date',      category: 'when',     dataType: 'DATE',    source: 'sap_ecc', description: 'Date of posting (BUDAT)',                notes: 'BKPF.BUDAT / ACDOCA.BUDAT', sapTable: 'BKPF', sapField: 'BUDAT', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Fiscal Year',       category: 'when',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'SAP fiscal year (GJAHR)',                notes: 'BKPF.GJAHR / ACDOCA.GJAHR', sapTable: 'BKPF', sapField: 'GJAHR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Posting Period',    category: 'when',     dataType: 'INT',     source: 'sap_ecc', description: 'SAP posting period 1–16 (MONAT)',        notes: 'BKPF.MONAT / ACDOCA.POPER', sapTable: 'BKPF', sapField: 'MONAT', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Cost Centre',       category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Cost centre account assignment (KOSTL)', notes: 'BSEG.KOSTL / ACDOCA.KOSTL', sapTable: 'BSEG', sapField: 'KOSTL', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Profit Centre',     category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Profit centre (PRCTR)',                  notes: 'BSEG.PRCTR / ACDOCA.PRCTR', sapTable: 'BSEG', sapField: 'PRCTR', sapMigrationStatus: 'both', copaCharacteristic: 'WW002' },
+              { id: id(), name: 'Document Type',     category: 'how',      dataType: 'VARCHAR', source: 'sap_ecc', description: 'FI document type (BLART)',               notes: 'BKPF.BLART / ACDOCA.BLART', sapTable: 'BKPF', sapField: 'BLART', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Reference Doc No',  category: 'why',      dataType: 'VARCHAR', source: 'sap_ecc', description: 'Reference document (XBLNR)',             notes: 'BKPF.XBLNR / ACDOCA.XBLNR', sapTable: 'BKPF', sapField: 'XBLNR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Amount in LC',      category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Amount in local currency (DMBTR)',       notes: 'BSEG.DMBTR / ACDOCA.DMBTR', sapTable: 'BSEG', sapField: 'DMBTR', sapMigrationStatus: 'both', copaValueField: 'VVB01' },
+              { id: id(), name: 'Amount in CC',      category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Amount in controlling area currency',    notes: 'COEP.WKGBTR / ACDOCA.KSL', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Debit/Credit Ind',  category: 'how_many', dataType: 'VARCHAR', source: 'sap_ecc', description: 'H=Credit S=Debit (SHKZG)',               notes: 'BSEG.SHKZG / ACDOCA.DRCRK', sapTable: 'BSEG', sapField: 'SHKZG', sapMigrationStatus: 'both' },
+            ]
+          },
+
+          // ── Event 2: CO-PA Profitability Line ─────────────
+          {
+            id: id(),
+            name: 'CO-PA Profitability Line',
+            description: 'A profitability line item posted to CO-PA — capturing segment revenue, COGS and overhead for contribution margin analysis. ECC: CE1XXXX (costing-based). S/4: ACDOCA (account-based CO-PA).',
+            columns: [
+              { id: id(), name: 'Controlling Area',  category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO-PA operating concern scope',          notes: 'CE1XXXX.KOKRS / ACDOCA.KOKRS', sapTable: 'CE1XXXX', sapField: 'KOKRS', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Profit Centre',     category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO-PA characteristic: Profit Centre',    notes: 'CE1XXXX.PRCTR / ACDOCA.PRCTR', sapTable: 'CE1XXXX', sapField: 'PRCTR', sapMigrationStatus: 'changed', copaCharacteristic: 'WW002' },
+              { id: id(), name: 'Customer',          category: 'who',      dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO-PA characteristic: Customer (KNDNR)', notes: 'CE1XXXX.KNDNR / ACDOCA partner fields', sapTable: 'CE1XXXX', sapField: 'KNDNR', sapMigrationStatus: 'changed', copaCharacteristic: 'WW003' },
+              { id: id(), name: 'Material',          category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO-PA characteristic: Material (ARTNR)', notes: 'CE1XXXX.ARTNR / ACDOCA.MATNR', sapTable: 'CE1XXXX', sapField: 'ARTNR', sapMigrationStatus: 'changed', copaCharacteristic: 'WW004' },
+              { id: id(), name: 'Sales Organisation', category: 'where',   dataType: 'VARCHAR', source: 'sap_ecc', description: 'CO-PA characteristic: Sales Org (VKORG)', notes: 'CE1XXXX.VKORG / ACDOCA.VKORG', sapTable: 'CE1XXXX', sapField: 'VKORG', sapMigrationStatus: 'changed', copaCharacteristic: 'WW005' },
+              { id: id(), name: 'Billing Date',      category: 'when',     dataType: 'DATE',    source: 'sap_ecc', description: 'Billing / posting date',                  notes: 'CE1XXXX.BUDAT', sapTable: 'CE1XXXX', sapField: 'BUDAT', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Fiscal Year',       category: 'when',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'Fiscal year (GJAHR)',                    notes: '', sapTable: 'CE1XXXX', sapField: 'GJAHR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Revenue',           category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'CO-PA value field: Revenue (VVB01)',      notes: 'CE1XXXX value field / ACDOCA.KSL', sapTable: 'CE1XXXX', sapField: 'VVB01', sapMigrationStatus: 'ecc_only', copaValueField: 'VVB01' },
+              { id: id(), name: 'COGS',              category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'CO-PA value field: Cost of Goods Sold',   notes: 'CE1XXXX value field / ACDOCA.KSL by cost element', sapTable: 'CE1XXXX', sapField: 'VVB02', sapMigrationStatus: 'ecc_only', copaValueField: 'VVB02' },
+              { id: id(), name: 'Contribution Margin', category: 'how_many', dataType: 'DECIMAL', source: 'derived', description: 'Revenue minus COGS',                  notes: 'Derived: Revenue - COGS' },
+              { id: id(), name: 'ACDOCA Line Item',  category: 'how_many', dataType: 'VARCHAR', source: 'sap_s4',  description: 'S/4 Universal Journal reference (DOCNR)', notes: 'ACDOCA.RLDNR+DOCNR — new in S/4; no ECC equivalent', sapTable: 'ACDOCA', sapField: 'DOCNR', sapMigrationStatus: 's4_only' },
+            ]
+          },
+
+          // ── Event 3: Cost Centre Allocation ───────────────
+          {
+            id: id(),
+            name: 'Cost Centre Allocation',
+            description: 'Periodic CO assessment or distribution cycle allocating costs between cost centres or to CO-PA. ECC: COEP (allocation line items). S/4: ACDOCA.',
+            columns: [
+              { id: id(), name: 'Sender Cost Centre',   category: 'who',      dataType: 'VARCHAR', source: 'sap_ecc', description: 'Cost centre sending the cost (SKOST)',  notes: 'COEP.SKOST / ACDOCA.SKOST', sapTable: 'COEP', sapField: 'SKOST', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Receiver Cost Centre', category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Receiving cost centre (KOSTL)',          notes: 'COEP.KOSTL / ACDOCA.KOSTL', sapTable: 'COEP', sapField: 'KOSTL', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Activity Type',        category: 'how',      dataType: 'VARCHAR', source: 'sap_ecc', description: 'Activity type driving allocation (LSTAR)', notes: 'COEP.LSTAR / ACDOCA.LSTAR', sapTable: 'COEP', sapField: 'LSTAR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Cost Element',         category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'Secondary cost element for allocation',  notes: 'COEP.KSTAR — in S/4 = ACDOCA.RACCT', sapTable: 'COEP', sapField: 'KSTAR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Controlling Area',     category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc', description: 'Controlling area scope (KOKRS)',         notes: 'COEP.KOKRS / ACDOCA.KOKRS', sapTable: 'COEP', sapField: 'KOKRS', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Fiscal Year',          category: 'when',     dataType: 'VARCHAR', source: 'sap_ecc', description: 'Fiscal year (GJAHR)',                    notes: 'COEP.GJAHR / ACDOCA.GJAHR', sapTable: 'COEP', sapField: 'GJAHR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Posting Period',       category: 'when',     dataType: 'INT',     source: 'sap_ecc', description: 'Posting period (PERIO)',                 notes: 'COEP.PERIO / ACDOCA.POPER', sapTable: 'COEP', sapField: 'PERIO', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Allocation Qty',       category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Quantity of activity allocated',          notes: 'COEP.MENGE', sapTable: 'COEP', sapField: 'MENGE', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Allocated Amount LC',  category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Cost amount in local currency (WKGBTR)', notes: 'COEP.WKGBTR / ACDOCA.DMBTR', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'COSS Period Total',    category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'CO period total from COSS table',        notes: 'COSS — retired in S/4; query ACDOCA directly', sapTable: 'COSS', sapField: 'WTGES', sapMigrationStatus: 'ecc_only' },
+            ]
+          }
+        ]
+      };
+
+      Storage.saveProject(project);
+      const migrated = Storage.load().projects.find(p => p.id === project.id);
+      if (migrated) {
+        migrated.events.forEach(e => {
+          e.grain = 'fiscal_period';
+        });
+        Storage.saveProject(migrated);
+      }
+      showToast('SAP FI/CO example project loaded.');
       Router.navigate(`project/${project.id}`);
     }
 

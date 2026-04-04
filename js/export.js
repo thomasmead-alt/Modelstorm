@@ -23,7 +23,8 @@ const Export = {
       'Origin', 'Origin Label', 'Data Type', 'Format / Examples',
       'Additivity', 'Budget Control', 'Owner', 'Responsibility Type', 'SCD Type',
       'P&L Line', 'Cash Flow Line', 'ML Tag', 'Conformed Dimension',
-      'Formula', 'Description', 'Notes'
+      'Formula', 'Description', 'Notes',
+      'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF'
     ];
     const rows = event.columns.map(col => [
       col.name,
@@ -45,7 +46,11 @@ const Export = {
       col.isConformed ? (col.publicDimensionId || 'Yes') : 'No',
       col.formula || '',
       col.description || '',
-      col.notes || ''
+      col.notes || '',
+      col.sapTable || '',
+      col.sapField || '',
+      typeof SAP_MIGRATION_STATUSES !== 'undefined' ? (SAP_MIGRATION_STATUSES[col.sapMigrationStatus || '']?.label || col.sapMigrationStatus || '') : (col.sapMigrationStatus || ''),
+      col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || '')
     ]);
 
     const csv = [headers, ...rows]
@@ -67,7 +72,8 @@ const Export = {
         'Data Type', 'Format / Examples',
         'Additivity', 'Budget Control', 'Responsibility Type',
         'P&L Line', 'Conformed Dimension',
-        'Description', 'Notes'
+        'Description', 'Notes',
+        'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF'
       ];
       const rows = event.columns.map(col => [
         event.name,
@@ -85,7 +91,11 @@ const Export = {
         col.plLineId || '',
         col.isConformed ? (col.publicDimensionId || 'Yes') : 'No',
         col.description || '',
-        col.notes || ''
+        col.notes || '',
+        col.sapTable || '',
+        col.sapField || '',
+        typeof SAP_MIGRATION_STATUSES !== 'undefined' ? (SAP_MIGRATION_STATUSES[col.sapMigrationStatus || '']?.label || col.sapMigrationStatus || '') : (col.sapMigrationStatus || ''),
+        col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || '')
       ]);
       return [headers, ...rows]
         .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
