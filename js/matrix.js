@@ -213,12 +213,12 @@ const Matrix = {
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
             onclick="Matrix.deleteRow('${col.id}')">✕</button>
-          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable ? 'Has notes/SAP ref' : 'Add notes'}"
-            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable ? 'var(--primary)' : 'inherit'}"
+          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable || col.publicDimensionId ? 'Has notes / refs' : 'Add notes'}"
+            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable || col.publicDimensionId ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable || col.publicDimensionId ? 'var(--primary)' : 'inherit'}"
             onclick="Matrix._toggleNotes('${col.id}')">✎</button>
         </td>
       </tr>
-      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField ? 'table-row' : 'none'}">
+      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId ? 'table-row' : 'none'}">
         <td colspan="2"></td>
         <td colspan="6" style="padding:4px 8px 8px">
           <div style="display:flex;gap:8px">
@@ -278,6 +278,20 @@ const Matrix = {
               </div>
             </div>
           </div>` : ''}
+          ${col.category !== 'how_many' ? `
+          <div class="dim-link-panel">
+            <div style="font-size:10px;color:var(--text-subtle);margin:6px 0 3px;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Conformed Dimension</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <select class="cell-input" style="flex:1;font-size:12px"
+                onchange="Matrix._linkDimension('${col.id}', this.value)">
+                <option value="">— Unlinked —</option>
+                ${Storage.getAllDimTemplates().map(d =>
+                  `<option value="${d.id}" ${col.publicDimensionId === d.id ? 'selected' : ''}>${d.isCustom ? '★ ' : ''}${this._esc(d.name)}</option>`
+                ).join('')}
+              </select>
+              ${col.isConformed ? '<span class="conformed-badge">Conformed ✓</span>' : ''}
+            </div>
+          </div>` : ''}
         </td>
         <td colspan="2"></td>
       </tr>
@@ -287,6 +301,34 @@ const Matrix = {
   _toggleNotes(colId) {
     const row = document.getElementById(`notes-${colId}`);
     if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+  },
+
+  _linkDimension(colId, dimId) {
+    const found = Storage.getEvent(this._getEventIdForCol(colId));
+    if (!found) return;
+    const { event, project } = found;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.publicDimensionId = dimId;
+    col.isConformed = !!dimId;
+    Storage.saveEvent(project.id, event);
+    // Refresh badge in the notes row without full re-render
+    const badge = document.querySelector(`#notes-${colId} .conformed-badge`);
+    const panel = document.querySelector(`#notes-${colId} .dim-link-panel`);
+    if (panel) {
+      const existing = panel.querySelector('.conformed-badge');
+      if (dimId && !existing) {
+        panel.querySelector('div').insertAdjacentHTML('beforeend', '<span class="conformed-badge">Conformed ✓</span>');
+      } else if (!dimId && existing) {
+        existing.remove();
+      }
+    }
+    // Update pencil button indicator
+    const btn = document.querySelector(`button[onclick*="_toggleNotes('${colId}')"]`);
+    if (btn) {
+      btn.style.opacity = (dimId || col.notes || col.formula || col.sapTable) ? '1' : '0.4';
+      btn.style.color  = (dimId || col.notes || col.formula || col.sapTable) ? 'var(--primary)' : 'inherit';
+    }
   },
 
   _formatPlaceholder(dataType) {

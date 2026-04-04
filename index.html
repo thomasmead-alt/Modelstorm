@@ -1080,8 +1080,10 @@
       if (found) DataGen.render(found.event, found.project);
       else Router.navigate('projects');
     });
-    Router.register('dimensions',     ()       => DimensionLibrary.renderList());
-    Router.register('dimension/:id',  ({ id }) => DimensionLibrary.renderTemplate(id));
+    Router.register('dimensions',          ()       => DimensionLibrary.renderList());
+    Router.register('dimension/new',       ()       => DimensionLibrary.renderEditor(null));
+    Router.register('dimension/:id',       ({ id }) => DimensionLibrary.renderTemplate(id));
+    Router.register('dimension/:id/edit',  ({ id }) => DimensionLibrary.renderEditor(id));
     Router.register('pl-mapper',      ()       => PLMapper.renderProjectPicker());
     Router.register('pl-mapper/:id',  ({ id }) => PLMapper.render(id));
     Router.register('pl-coverage/:id', ({ id }) => PLMapper.renderCoverage(id));

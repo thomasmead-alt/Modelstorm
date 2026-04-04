@@ -27,6 +27,9 @@ const Storage = {
   // Adds new fields with safe defaults to any existing data
 
   _migrate(data) {
+    // Root-level new fields
+    if (!data.customDimensions) data.customDimensions = [];
+
     data.projects = (data.projects || []).map(p => {
       // Project-level new fields
       if (!p.businessAreas) p.businessAreas = [];
@@ -216,5 +219,40 @@ const Storage = {
     const project = this.getProject(projectId);
     if (!project) return [];
     return project.cashFlowLines || (typeof DEFAULT_CASHFLOW_LINES !== 'undefined' ? DEFAULT_CASHFLOW_LINES : []);
+  },
+
+  // ── Custom dimension template helpers ─────────────────────
+
+  // Returns built-ins (isCustom:false) + user-created dims (isCustom:true)
+  getAllDimTemplates() {
+    const data = this.load();
+    const builtIns = (typeof DEFAULT_PUBLIC_DIMENSIONS !== 'undefined' ? DEFAULT_PUBLIC_DIMENSIONS : [])
+      .map(d => ({ ...d, isCustom: false }));
+    return [...builtIns, ...(data.customDimensions || [])];
+  },
+
+  // Upsert a custom dimension by id
+  saveCustomDimension(dim) {
+    const data = this.load();
+    if (!data.customDimensions) data.customDimensions = [];
+    const idx = data.customDimensions.findIndex(d => d.id === dim.id);
+    if (idx >= 0) data.customDimensions[idx] = dim;
+    else data.customDimensions.push(dim);
+    this.save(data);
+  },
+
+  // Delete a custom dimension; unlinks (but keeps) referencing event columns
+  deleteCustomDimension(dimId) {
+    const data = this.load();
+    data.customDimensions = (data.customDimensions || []).filter(d => d.id !== dimId);
+    data.projects.forEach(p => (p.events || []).forEach(e =>
+      (e.columns || []).forEach(col => {
+        if (col.publicDimensionId === dimId) {
+          col.publicDimensionId = '';
+          col.isConformed = false;
+        }
+      })
+    ));
+    this.save(data);
   }
 };
