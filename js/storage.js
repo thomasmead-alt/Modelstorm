@@ -41,6 +41,12 @@ const Storage = {
         // Event-level new fields
         if (!e.grain) e.grain = 'transaction';
         if (!e.businessAreaIds) e.businessAreaIds = [];
+        // Planning / temporal
+        if (!e.temporalType)  e.temporalType  = 'pointInTime';
+        if (!e.eventPurpose)  e.eventPurpose  = 'actuals';
+        if (!e.phasingMethod) e.phasingMethod = '';
+        if (!e.planVersionId) e.planVersionId = '';
+        if (!e.glMappings)    e.glMappings    = [];
 
         e.columns = (e.columns || []).map(col => {
           // Phase 2: additivity, budget, responsibility, conformed dims
@@ -67,6 +73,14 @@ const Storage = {
           if (!col.sapMigrationStatus) col.sapMigrationStatus = '';
           if (!col.copaCharacteristic) col.copaCharacteristic = '';
           if (!col.copaValueField)     col.copaValueField = '';
+          // Date key role + financial anchor
+          if (!col.dateKeyRole)        col.dateKeyRole     = '';
+          if (!col.joinDimension)      col.joinDimension   = '';
+          if (col.isFinancialAnchor === undefined) col.isFinancialAnchor = false;
+          // GL account mapping
+          if (!col.glAccount)          col.glAccount          = '';
+          if (!col.glAccountRangeFrom) col.glAccountRangeFrom = '';
+          if (!col.glAccountRangeTo)   col.glAccountRangeTo   = '';
           return col;
         });
         return e;
@@ -253,6 +267,33 @@ const Storage = {
         }
       })
     ));
+    this.save(data);
+  },
+
+  // ── GL mapping helpers ────────────────────────────────────
+
+  // Upsert a GL mapping entry on an event
+  saveGlMapping(projectId, eventId, mapping) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    if (!event.glMappings) event.glMappings = [];
+    const idx = event.glMappings.findIndex(m => m.id === mapping.id);
+    if (idx >= 0) event.glMappings[idx] = mapping;
+    else event.glMappings.push(mapping);
+    this.save(data);
+  },
+
+  // Delete a GL mapping entry from an event
+  deleteGlMapping(projectId, eventId, mappingId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    event.glMappings = (event.glMappings || []).filter(m => m.id !== mappingId);
     this.save(data);
   }
 };

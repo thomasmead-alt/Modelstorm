@@ -24,7 +24,9 @@ const Export = {
       'Additivity', 'Budget Control', 'Owner', 'Responsibility Type', 'SCD Type',
       'P&L Line', 'Cash Flow Line', 'ML Tag', 'Conformed Dimension',
       'Formula', 'Description', 'Notes',
-      'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF'
+      'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF',
+      'Date Key Role', 'Joins To Dimension', 'Financial Anchor',
+      'GL Account', 'GL Range From', 'GL Range To'
     ];
     const rows = event.columns.map(col => [
       col.name,
@@ -50,7 +52,13 @@ const Export = {
       col.sapTable || '',
       col.sapField || '',
       typeof SAP_MIGRATION_STATUSES !== 'undefined' ? (SAP_MIGRATION_STATUSES[col.sapMigrationStatus || '']?.label || col.sapMigrationStatus || '') : (col.sapMigrationStatus || ''),
-      col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || '')
+      col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || ''),
+      typeof DATE_KEY_ROLES !== 'undefined' ? (DATE_KEY_ROLES[col.dateKeyRole || '']?.label || col.dateKeyRole || '') : (col.dateKeyRole || ''),
+      col.joinDimension || '',
+      col.isFinancialAnchor ? 'Yes' : 'No',
+      col.glAccount || '',
+      col.glAccountRangeFrom || '',
+      col.glAccountRangeTo || ''
     ]);
 
     const csv = [headers, ...rows]
@@ -66,18 +74,24 @@ const Export = {
     const sections = project.events.map(event => {
       const grain = event.grain || 'transaction';
       const grainLabel = GRAINS?.[grain]?.label || grain;
+      const purpose = typeof EVENT_PURPOSES !== 'undefined' ? (EVENT_PURPOSES[event.eventPurpose || 'actuals']?.label || event.eventPurpose || 'Actuals') : (event.eventPurpose || '');
       const headers = [
-        'Event', 'Event Grain',
+        'Event', 'Event Grain', 'Event Purpose', 'Temporal Type', 'Phasing Method',
         'Column Name', 'Category', 'Category Label', 'Origin', 'Origin Label',
         'Data Type', 'Format / Examples',
         'Additivity', 'Budget Control', 'Responsibility Type',
         'P&L Line', 'Conformed Dimension',
         'Description', 'Notes',
-        'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF'
+        'SAP Table', 'SAP Field', 'SAP Migration Status', 'CO-PA Char/VF',
+        'Date Key Role', 'Joins To Dimension', 'Financial Anchor',
+        'GL Account', 'GL Range From', 'GL Range To'
       ];
       const rows = event.columns.map(col => [
         event.name,
         grainLabel,
+        purpose,
+        event.temporalType || 'pointInTime',
+        event.phasingMethod || '',
         col.name,
         col.category,
         CATEGORIES[col.category]?.label || col.category,
@@ -95,7 +109,13 @@ const Export = {
         col.sapTable || '',
         col.sapField || '',
         typeof SAP_MIGRATION_STATUSES !== 'undefined' ? (SAP_MIGRATION_STATUSES[col.sapMigrationStatus || '']?.label || col.sapMigrationStatus || '') : (col.sapMigrationStatus || ''),
-        col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || '')
+        col.category === 'how_many' ? (col.copaValueField || '') : (col.copaCharacteristic || ''),
+        typeof DATE_KEY_ROLES !== 'undefined' ? (DATE_KEY_ROLES[col.dateKeyRole || '']?.label || col.dateKeyRole || '') : (col.dateKeyRole || ''),
+        col.joinDimension || '',
+        col.isFinancialAnchor ? 'Yes' : 'No',
+        col.glAccount || '',
+        col.glAccountRangeFrom || '',
+        col.glAccountRangeTo || ''
       ]);
       return [headers, ...rows]
         .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))

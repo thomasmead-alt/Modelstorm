@@ -193,13 +193,55 @@
   <script>
     // ─── Global constants: event grain levels ─────────────
     const GRAINS = {
-      transaction: { label: 'Transaction', short: 'TXN', description: 'Each individual record — finest grain', color: '#6b7280', bg: '#f9fafb' },
-      daily:       { label: 'Daily',       short: 'DAY', description: 'Aggregated to one row per day', color: '#3b82f6', bg: '#eff6ff' },
-      weekly:      { label: 'Weekly',      short: 'WK',  description: 'Aggregated to one row per week', color: '#8b5cf6', bg: '#f5f3ff' },
-      monthly:     { label: 'Monthly',     short: 'MTH', description: 'Aggregated to one row per fiscal period/month', color: '#f59e0b', bg: '#fffbeb' },
-      quarterly:   { label: 'Quarterly',   short: 'QTR', description: 'Aggregated to one row per quarter', color: '#10b981', bg: '#ecfdf5' },
-      annual:      { label: 'Annual',        short: 'YR',  description: 'Aggregated to one row per financial year', color: '#e85d04', bg: '#fff7ed' },
-      fiscal_period: { label: 'Fiscal Period', short: 'FP',  description: 'SAP posting period + fiscal year — one row per period (e.g. Period 001 FY2025). Supports up to 16 periods including closing periods.', color: '#065f46', bg: '#d1fae5' }
+      transaction:  { label: 'Transaction',  short: 'TXN', description: 'Each individual record — finest grain', color: '#6b7280', bg: '#f9fafb' },
+      daily:        { label: 'Daily',        short: 'DAY', description: 'Aggregated to one row per day', color: '#3b82f6', bg: '#eff6ff' },
+      weekly:       { label: 'Weekly',       short: 'WK',  description: 'Aggregated to one row per week', color: '#8b5cf6', bg: '#f5f3ff' },
+      monthly:      { label: 'Monthly',      short: 'MTH', description: 'Aggregated to one row per fiscal period/month', color: '#f59e0b', bg: '#fffbeb' },
+      quarterly:    { label: 'Quarterly',    short: 'QTR', description: 'Aggregated to one row per quarter', color: '#10b981', bg: '#ecfdf5' },
+      annual:       { label: 'Annual',       short: 'YR',  description: 'Aggregated to one row per financial year', color: '#e85d04', bg: '#fff7ed' },
+      fiscal_period:{ label: 'Fiscal Period',short: 'FP',  description: 'SAP posting period + fiscal year — one row per period (e.g. Period 001 FY2025). Supports up to 16 periods including closing periods.', color: '#065f46', bg: '#d1fae5' },
+      plan_range:   { label: 'Plan Range',   short: 'RNG', description: 'Operational plan entry spanning multiple periods — carries start/end period FKs. Requires phasing before CO transfer.', color: '#7c3aed', bg: '#f5f3ff' },
+      plan_period:  { label: 'Plan Period',  short: 'PLN', description: 'Phased plan — one row per period per version. Period-key FK to dim_sap_fiscal_calendar. Ready for CO transfer (KP06/KP26/CJ40).', color: '#0369a1', bg: '#e0f2fe' }
+    };
+
+    // ─── Global constants: event purpose types ─────────────
+    const EVENT_PURPOSES = {
+      actuals:          { label: 'Actuals',           short: 'ACT', description: 'Records what happened — posted transactions and confirmed events', color: '#166534', bg: '#dcfce7' },
+      operational_plan: { label: 'Operational Plan',  short: 'OPL', description: 'Forward-looking plan entries from operational teams — may span a date range and require phasing', color: '#7c3aed', bg: '#f5f3ff' },
+      financial_plan:   { label: 'Financial Plan',    short: 'FPL', description: 'Period-level consolidated plan ready for CO controlling objects and reporting — output of phasing', color: '#0369a1', bg: '#e0f2fe' },
+      forecast:         { label: 'Forecast',          short: 'FC',  description: 'Re-projected estimate during the year — blends actuals YTD with forward-looking assumptions', color: '#d97706', bg: '#fef3c7' },
+      budget:           { label: 'Budget',            short: 'BUD', description: 'Annual budget baseline — fixed reference point for variance analysis', color: '#059669', bg: '#ecfdf5' }
+    };
+
+    // ─── Global constants: phasing methods ────────────────
+    const PHASING_METHODS = {
+      even:          { label: 'Even (Straight-line)',  description: 'Equal amount each period — total ÷ number of periods' },
+      calendar_days: { label: 'Calendar Days',         description: 'Proportional to calendar days per period (handles short/long months)' },
+      working_days:  { label: 'Working Days',          description: 'Proportional to working days per period (excludes weekends and holidays)' },
+      front_loaded:  { label: 'Front-loaded',          description: 'Declining balance — more spend in early periods (e.g. project mobilisation)' },
+      back_loaded:   { label: 'Back-loaded',           description: 'Increasing balance — more spend in later periods (e.g. delayed delivery)' },
+      milestone:     { label: 'Milestone-based',       description: 'Distribution tied to specific project milestones or delivery dates' },
+      seasonal:      { label: 'Seasonal Curve',        description: 'Follows a predefined seasonal profile (e.g. retail peak in Q4)' },
+      prior_actuals: { label: 'Prior Year Actuals',    description: 'Mirrors actual distribution from the equivalent prior period' },
+      manual:        { label: 'Manual Profile',        description: 'User-defined percentage split per period — must sum to 100%' }
+    };
+
+    // ─── Global constants: date key roles ─────────────────
+    const DATE_KEY_ROLES = {
+      '':                  { label: '— Not set —',          dim: '' },
+      transaction_date:    { label: 'Transaction Date',     dim: 'dim_date',                 description: 'When the business event occurred commercially' },
+      document_date:       { label: 'Document Date',        dim: 'dim_date',                 description: 'Date printed on the source document' },
+      posting_date:        { label: 'Posting Date',         dim: 'dim_sap_fiscal_calendar',  description: 'Date posted to the ledger — financial anchor for actuals (SAP BUDAT)' },
+      period_key:          { label: 'Fiscal Period Key',    dim: 'dim_sap_fiscal_calendar',  description: 'Fiscal year + period — anchor for period-grain actuals and plans' },
+      value_date:          { label: 'Value Date',           dim: 'dim_date',                 description: 'Bank value date / settlement date' },
+      due_date:            { label: 'Due Date',             dim: 'dim_date',                 description: 'Payment due date or contract maturity' },
+      open_date:           { label: 'Open / Created Date',  dim: 'dim_date',                 description: 'Date the record was opened or created' },
+      close_date:          { label: 'Close / Cleared Date', dim: 'dim_date',                 description: 'Date the record was cleared, closed, or fulfilled' },
+      plan_period:         { label: 'Plan Period',          dim: 'dim_sap_fiscal_calendar',  description: 'Period a point-in-time plan value is assigned to' },
+      plan_start_period:   { label: 'Plan Start Period',    dim: 'dim_sap_fiscal_calendar',  description: 'First period of a range plan — pair with Plan End Period' },
+      plan_end_period:     { label: 'Plan End Period',      dim: 'dim_sap_fiscal_calendar',  description: 'Last period of a range plan — pair with Plan Start Period' },
+      baseline_date:       { label: 'Baseline Date',        dim: 'dim_sap_fiscal_calendar',  description: 'Original plan baseline for variance calculation' },
+      other:               { label: 'Other (see notes)',    dim: 'dim_date',                 description: 'Describe the role in the Notes field' }
     };
 
     // ─── Global constants: measure additivity types ────────
@@ -363,20 +405,25 @@
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
       {
-        id: 'dim_date', name: 'Date / Fiscal Calendar', category: 'when', icon: '📅',
-        description: 'Standard date dimension with fiscal calendar attributes. Enables time-based analysis, period comparison, and fiscal reporting.',
+        id: 'dim_date', name: 'Calendar Date', category: 'when', icon: '📅',
+        description: 'Pure calendar date dimension. Use for transaction dates, document dates, due dates, and any date that is not a ledger posting date. Contains fiscal_period_key as a bridge FK to dim_sap_fiscal_calendar — enabling any transaction-grain event to roll up to fiscal periods without re-posting.',
         columns: [
-          { name: 'date_key',        dataType: 'INT',     description: 'Surrogate key (YYYYMMDD integer)',   isKey: true,  responsibilityType: 'none' },
-          { name: 'date',            dataType: 'DATE',    description: 'Calendar date',                       isKey: false, responsibilityType: 'none' },
-          { name: 'day_of_week',     dataType: 'VARCHAR', description: 'Day name (Monday–Sunday)',            isKey: false, responsibilityType: 'none' },
-          { name: 'week_number',     dataType: 'INT',     description: 'ISO week number (1–53)',              isKey: false, responsibilityType: 'none' },
-          { name: 'month_name',      dataType: 'VARCHAR', description: 'Month name (January–December)',      isKey: false, responsibilityType: 'none' },
-          { name: 'month_number',    dataType: 'INT',     description: 'Month number (1–12)',                 isKey: false, responsibilityType: 'none' },
-          { name: 'quarter',         dataType: 'VARCHAR', description: 'Calendar quarter (Q1–Q4)',            isKey: false, responsibilityType: 'none' },
-          { name: 'fiscal_period',   dataType: 'VARCHAR', description: 'Fiscal period code (e.g. FY25-P01)', isKey: false, responsibilityType: 'none' },
-          { name: 'fiscal_year',     dataType: 'VARCHAR', description: 'Fiscal year (e.g. FY2025)',           isKey: false, responsibilityType: 'none' },
-          { name: 'is_weekend',      dataType: 'BOOLEAN', description: 'True if Saturday or Sunday',         isKey: false, responsibilityType: 'none' },
-          { name: 'is_holiday',      dataType: 'BOOLEAN', description: 'True if public holiday',             isKey: false, responsibilityType: 'none' }
+          { name: 'date_key',            dataType: 'INT',     description: 'Surrogate key (YYYYMMDD integer)',                                              isKey: true,  responsibilityType: 'none' },
+          { name: 'full_date',           dataType: 'DATE',    description: 'Calendar date',                                                                 isKey: false, responsibilityType: 'none' },
+          { name: 'day_of_week',         dataType: 'INT',     description: 'ISO day of week: 1=Monday … 7=Sunday',                                         isKey: false, responsibilityType: 'none' },
+          { name: 'day_name',            dataType: 'VARCHAR', description: 'Day name (Monday–Sunday)',                                                      isKey: false, responsibilityType: 'none' },
+          { name: 'day_of_month',        dataType: 'INT',     description: 'Day of month (1–31)',                                                           isKey: false, responsibilityType: 'none' },
+          { name: 'day_of_year',         dataType: 'INT',     description: 'Day of year (1–366)',                                                           isKey: false, responsibilityType: 'none' },
+          { name: 'week_number',         dataType: 'INT',     description: 'ISO week number (1–53)',                                                        isKey: false, responsibilityType: 'none' },
+          { name: 'month_number',        dataType: 'INT',     description: 'Month number (1–12)',                                                           isKey: false, responsibilityType: 'none' },
+          { name: 'month_name',          dataType: 'VARCHAR', description: 'Month name (January–December)',                                                 isKey: false, responsibilityType: 'none' },
+          { name: 'calendar_year_month', dataType: 'VARCHAR', description: 'YYYY-MM string for easy grouping',                                              isKey: false, responsibilityType: 'none' },
+          { name: 'quarter',             dataType: 'VARCHAR', description: 'Calendar quarter (Q1–Q4)',                                                      isKey: false, responsibilityType: 'none' },
+          { name: 'calendar_year',       dataType: 'INT',     description: 'Gregorian calendar year',                                                       isKey: false, responsibilityType: 'none' },
+          { name: 'is_weekday',          dataType: 'BOOLEAN', description: 'True if Monday–Friday',                                                         isKey: false, responsibilityType: 'none' },
+          { name: 'is_public_holiday',   dataType: 'BOOLEAN', description: 'True if public holiday (populate per country/region)',                          isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_period_key',   dataType: 'INT',     description: 'FK → dim_sap_fiscal_calendar.period_key — FISCAL BRIDGE: joins any calendar date to the correct SAP posting period for financial roll-up', isKey: false, responsibilityType: 'none' },
+          { name: 'is_open_period',      dataType: 'BOOLEAN', description: 'True if the FI posting period containing this date is open in SAP',             isKey: false, responsibilityType: 'none' }
         ]
       },
       {
@@ -616,7 +663,38 @@
           { name: 'calendar_year',         dataType: 'INT',     description: 'Gregorian calendar year',                        isKey: false, responsibilityType: 'none' },
           { name: 'calendar_month',        dataType: 'INT',     description: 'Gregorian calendar month (1–12)',                isKey: false, responsibilityType: 'none' },
           { name: 'is_closing_period',     dataType: 'BOOLEAN', description: 'True if this is a closing period (13–16)',       isKey: false, responsibilityType: 'none' },
-          { name: 'is_open',               dataType: 'BOOLEAN', description: 'True if the period is open for posting',         isKey: false, responsibilityType: 'none' }
+          { name: 'period_type',           dataType: 'VARCHAR', description: 'normal | opening (period 0) | closing_special (13–16) — never plan into closing/opening periods', isKey: false, responsibilityType: 'none' },
+          { name: 'is_open',               dataType: 'BOOLEAN', description: 'True if the period is open for posting',         isKey: false, responsibilityType: 'none' },
+          { name: 'plan_version',          dataType: 'VARCHAR', description: 'SAP CO planning version code (0 = actuals, 1–999 = plan versions)',  isKey: false, responsibilityType: 'none' }
+        ]
+      },
+
+      // ── Planning Dimensions ───────────────────────────────
+      {
+        id: 'dim_plan_version', name: 'Plan Version', category: 'why', icon: '📋',
+        description: 'Identifies the planning version for a fact row — Budget, Forecast, Latest Best Estimate, or Actuals. Enables actuals vs plan on the same fact table (SAP CO model approach).',
+        columns: [
+          { name: 'version_key',       dataType: 'INT',     description: 'Surrogate key',                                                                           isKey: true,  responsibilityType: 'none' },
+          { name: 'version_code',      dataType: 'VARCHAR', description: 'Short code (e.g. BUDGET_FY25, FC03_FY25, LBE_Q3, ACTUALS)',                               isKey: false, responsibilityType: 'none' },
+          { name: 'version_label',     dataType: 'VARCHAR', description: 'Full descriptive label (e.g. Annual Budget FY2025, Forecast 3 FY2025)',                    isKey: false, responsibilityType: 'none' },
+          { name: 'version_type',      dataType: 'VARCHAR', description: 'actuals | budget | forecast | latest_best_estimate | baseline — drives variance pairs',    isKey: false, responsibilityType: 'none' },
+          { name: 'fiscal_year',       dataType: 'VARCHAR', description: 'Fiscal year this version relates to (e.g. FY2025)',                                        isKey: false, responsibilityType: 'none' },
+          { name: 'is_locked',         dataType: 'BOOLEAN', description: 'True if the version is locked and no further planning entries permitted',                  isKey: false, responsibilityType: 'none' },
+          { name: 'is_current',        dataType: 'BOOLEAN', description: 'True if this is the currently active forecast or budget for reporting',                   isKey: false, responsibilityType: 'none' },
+          { name: 'created_date_key',  dataType: 'INT',     description: 'FK → dim_date.date_key — when the version was created',                                   isKey: false, responsibilityType: 'none' },
+          { name: 'approved_by',       dataType: 'VARCHAR', description: 'Name or role of the approver',                                                            isKey: false, responsibilityType: 'none' },
+          { name: 'sap_version_code',  dataType: 'VARCHAR', description: 'SAP CO planning version number (0 = actuals, 1 = plan version 1, etc.)',                  isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_phasing_method', name: 'Phasing Method', category: 'how', icon: '〰️',
+        description: 'Defines how an over-time operational plan entry is distributed across fiscal periods. Applied to range-plan events to produce period-level phased plan facts for CO transfer.',
+        columns: [
+          { name: 'phasing_method_key', dataType: 'INT',     description: 'Surrogate key',                                                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'method_code',        dataType: 'VARCHAR', description: 'even | calendar_days | working_days | front_loaded | back_loaded | milestone | seasonal | prior_actuals | manual', isKey: false, responsibilityType: 'none' },
+          { name: 'method_label',       dataType: 'VARCHAR', description: 'Human-readable label',                                                                   isKey: false, responsibilityType: 'none' },
+          { name: 'profile_weights',    dataType: 'VARCHAR', description: 'JSON array of period weights summing to 1.0 — used for manual and seasonal profiles (e.g. [0.05,0.07,…])', isKey: false, responsibilityType: 'none' },
+          { name: 'seasonal_reference', dataType: 'VARCHAR', description: 'Reference to a named seasonal index (e.g. RETAIL_UK, B2B_SAAS) for seasonal curve method', isKey: false, responsibilityType: 'none' }
         ]
       },
 

@@ -173,6 +173,8 @@ const Matrix = {
             placeholder="Column name…"
             onchange="Matrix.updateField('${col.id}', 'name', this.value)"
             onblur="Matrix.updateField('${col.id}', 'name', this.value)">
+          ${col.isFinancialAnchor ? `<span class="anchor-badge" title="Financial anchor — P&L and period-end reporting join through this date key">⚓</span>` : ''}
+          ${col.glAccount || col.glAccountRangeFrom ? `<span class="gl-badge" title="GL: ${col.glAccount || col.glAccountRangeFrom + '–' + col.glAccountRangeTo}">GL</span>` : ''}
         </td>
         <td class="col-cat">
           <div class="cat-wrapper">
@@ -213,12 +215,12 @@ const Matrix = {
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
             onclick="Matrix.deleteRow('${col.id}')">✕</button>
-          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable || col.publicDimensionId ? 'Has notes / refs' : 'Add notes'}"
-            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable || col.publicDimensionId ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable || col.publicDimensionId ? 'var(--primary)' : 'inherit'}"
+          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'Has notes / refs' : 'Add notes'}"
+            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'var(--primary)' : 'inherit'}"
             onclick="Matrix._toggleNotes('${col.id}')">✎</button>
         </td>
       </tr>
-      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId ? 'table-row' : 'none'}">
+      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'table-row' : 'none'}">
         <td colspan="2"></td>
         <td colspan="6" style="padding:4px 8px 8px">
           <div style="display:flex;gap:8px">
@@ -236,6 +238,69 @@ const Matrix = {
                 onblur="Matrix.updateField('${col.id}', 'formula', this.value)">${this._esc(col.formula || '')}</textarea>
             </div>` : ''}
           </div>
+          ${col.category === 'when' ? `
+          <div class="date-key-role-panel">
+            <div class="date-key-role-header">Date Key Role</div>
+            <div class="date-key-role-grid">
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">ROLE</div>
+                <select class="cell-input" style="width:100%;font-size:12px"
+                  onchange="Matrix._updateDateKeyRole('${col.id}', this.value)">
+                  ${typeof DATE_KEY_ROLES !== 'undefined'
+                    ? Object.entries(DATE_KEY_ROLES).map(([k, r]) =>
+                        `<option value="${k}" ${(col.dateKeyRole || '') === k ? 'selected' : ''}>${r.label}</option>`
+                      ).join('')
+                    : ''}
+                </select>
+                ${col.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[col.dateKeyRole]
+                  ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px;display:block">${DATE_KEY_ROLES[col.dateKeyRole].description || ''}</span>`
+                  : ''}
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">JOINS TO DIMENSION</div>
+                <input list="dim-list-${col.id}" class="cell-input" style="width:100%;font-size:12px"
+                  value="${this._esc(col.joinDimension || '')}" placeholder="e.g. dim_date"
+                  onblur="Matrix.updateField('${col.id}', 'joinDimension', this.value)">
+                <datalist id="dim-list-${col.id}">
+                  ${Storage.getAllDimTemplates().filter(d => d.category === 'when').map(d =>
+                    `<option value="${d.id}">${this._esc(d.name)}</option>`
+                  ).join('')}
+                </datalist>
+              </div>
+              <div style="display:flex;align-items:flex-start;padding-top:16px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" ${col.isFinancialAnchor ? 'checked' : ''}
+                    onchange="Matrix._setFinancialAnchor('${col.id}', this.checked)">
+                  <span>⚓ Financial Anchor</span>
+                </label>
+              </div>
+            </div>
+            ${col.isFinancialAnchor ? `<div style="font-size:10px;padding:4px 6px;background:#dcfce7;border-radius:4px;color:#166534;margin-top:4px">This column is the financial anchor — P&L, cash flow, and period-end reporting join through here.</div>` : ''}
+          </div>` : ''}
+          ${col.category === 'how_many' ? `
+          <div class="gl-account-panel">
+            <div class="gl-account-header">GL Account</div>
+            <div class="gl-account-grid">
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">GL ACCOUNT</div>
+                <input class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.glAccount || '')}" placeholder="e.g. 400100"
+                  onblur="Matrix.updateField('${col.id}', 'glAccount', this.value)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">RANGE FROM</div>
+                <input class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.glAccountRangeFrom || '')}" placeholder="e.g. 400000"
+                  onblur="Matrix.updateField('${col.id}', 'glAccountRangeFrom', this.value)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">RANGE TO</div>
+                <input class="cell-input" style="width:100%;font-size:12px;font-family:monospace"
+                  value="${this._esc(col.glAccountRangeTo || '')}" placeholder="e.g. 499999"
+                  onblur="Matrix.updateField('${col.id}', 'glAccountRangeTo', this.value)">
+              </div>
+            </div>
+          </div>` : ''}
           ${(col.source === 'sap_ecc' || col.source === 'sap_s4') ? `
           <div class="sap-tech-ref">
             <div class="sap-tech-ref-header">SAP Technical Reference</div>
@@ -331,6 +396,74 @@ const Matrix = {
     }
   },
 
+  // Updates dateKeyRole and auto-suggests joinDimension
+  _updateDateKeyRole(colId, role) {
+    const found = Storage.getEvent(this._getEventIdForCol(colId));
+    if (!found) return;
+    const { event, project } = found;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.dateKeyRole = role;
+    // Auto-suggest dimension if not already set
+    if (!col.joinDimension && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[role]) {
+      col.joinDimension = DATE_KEY_ROLES[role].dim || '';
+    }
+    // Auto-set financial anchor for posting_date / period_key / plan_period if none exists
+    const financialRoles = ['posting_date', 'period_key', 'plan_period'];
+    if (financialRoles.includes(role) && !col.isFinancialAnchor) {
+      const alreadyHasAnchor = event.columns.some(c => c.id !== colId && c.isFinancialAnchor);
+      if (!alreadyHasAnchor) {
+        col.isFinancialAnchor = true;
+      }
+    }
+    Storage.saveEvent(project.id, event);
+    // Refresh the notes row in place (avoid full re-render for responsiveness)
+    this.renderEvent(this._getEventIdForCol(colId));
+  },
+
+  // Sets/clears financial anchor; warns if multiple
+  _setFinancialAnchor(colId, checked) {
+    const found = Storage.getEvent(this._getEventIdForCol(colId));
+    if (!found) return;
+    const { event, project } = found;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.isFinancialAnchor = checked;
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(this._getEventIdForCol(colId));
+  },
+
+  // GL mapping management
+  _addGlMapping(eventId) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    const mapping = { id: Storage.generateId(), label: '', accountFrom: '', accountTo: '', costElementGroup: '', chartOfAccounts: '', sapTransactionCodes: '', affectedColumnIds: [], notes: '' };
+    if (!event.glMappings) event.glMappings = [];
+    event.glMappings.push(mapping);
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
+  _updateGlMapping(eventId, mappingId, field, value) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    const mapping = (event.glMappings || []).find(m => m.id === mappingId);
+    if (!mapping) return;
+    mapping[field] = value;
+    Storage.saveEvent(project.id, event);
+  },
+
+  _deleteGlMapping(eventId, mappingId) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    event.glMappings = (event.glMappings || []).filter(m => m.id !== mappingId);
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
   _formatPlaceholder(dataType) {
     switch (dataType) {
       case 'VARCHAR': case 'TEXT': return 'e.g. Value1, Value2, Value3';
@@ -394,7 +527,48 @@ const Matrix = {
     const saCount = measures.filter(c => c.additiveType === 'semi_additive').length;
     const bcCount = event.columns.filter(c => c.budgetControl).length;
 
+    // Planning / temporal
+    const purpose = event.eventPurpose || 'actuals';
+    const purposeInfo = (typeof EVENT_PURPOSES !== 'undefined' && EVENT_PURPOSES[purpose]) || { label: purpose };
+    const purposeOpts = typeof EVENT_PURPOSES !== 'undefined'
+      ? Object.entries(EVENT_PURPOSES).map(([k, p]) =>
+          `<option value="${k}" ${purpose === k ? 'selected' : ''}>${p.label}</option>`).join('')
+      : '';
+    const isPlanning = purpose !== 'actuals';
+    const temporal = event.temporalType || 'pointInTime';
+    const phasing = event.phasingMethod || '';
+    const phasingOpts = typeof PHASING_METHODS !== 'undefined'
+      ? `<option value="">— Select method —</option>` + Object.entries(PHASING_METHODS).map(([k, m]) =>
+          `<option value="${k}" ${phasing === k ? 'selected' : ''}>${m.label}</option>`).join('')
+      : '';
+    const isOverTime = temporal === 'overTime';
+
+    // Health warnings
+    const whenCols = event.columns.filter(c => c.category === 'when');
+    const anchorCols = whenCols.filter(c => c.isFinancialAnchor);
+    const warnings = [];
+    if (whenCols.length > 0 && anchorCols.length === 0) {
+      warnings.push(`<span class="event-health-warn">⚠ No financial anchor date — set a <em>when</em> column as the financial anchor</span>`);
+    }
+    if (anchorCols.length > 1) {
+      warnings.push(`<span class="event-health-warn">⚠ Multiple financial anchors (${anchorCols.length}) — only one expected</span>`);
+    }
+    if (isOverTime && !phasing) {
+      warnings.push(`<span class="event-health-warn">⚠ Over-time event requires a phasing method</span>`);
+    }
+    if (isOverTime) {
+      const hasPlanStart = whenCols.some(c => c.dateKeyRole === 'plan_start_period');
+      const hasPlanEnd   = whenCols.some(c => c.dateKeyRole === 'plan_end_period');
+      if (!hasPlanStart || !hasPlanEnd) {
+        warnings.push(`<span class="event-health-warn">⚠ Over-time event needs both <em>plan_start_period</em> and <em>plan_end_period</em> date FKs</span>`);
+      }
+    }
+    const warningsHtml = warnings.length
+      ? `<div class="event-health-warnings">${warnings.join('')}</div>`
+      : '';
+
     return `
+      ${warningsHtml}
       <div class="event-meta-panel">
         <div class="meta-field">
           <label>Event Grain</label>
@@ -406,6 +580,49 @@ const Matrix = {
           </span>
         </div>
         <div class="meta-field">
+          <label>Event Purpose</label>
+          <select onchange="Matrix.updateEventPurpose('${event.id}', this.value)">
+            ${purposeOpts}
+          </select>
+          <span style="font-size:10px;color:var(--text-subtle);margin-top:2px">${purposeInfo.description || ''}</span>
+        </div>
+        ${isPlanning ? `
+        <div class="meta-field">
+          <label>Temporal Type</label>
+          <div style="display:flex;gap:12px;margin-top:4px;font-size:12px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="radio" name="temporal-${event.id}" value="pointInTime" ${!isOverTime ? 'checked' : ''}
+                onchange="Matrix.updateEventField('${event.id}', 'temporalType', 'pointInTime')">
+              Point in Time
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="radio" name="temporal-${event.id}" value="overTime" ${isOverTime ? 'checked' : ''}
+                onchange="Matrix.updateEventField('${event.id}', 'temporalType', 'overTime')">
+              Over Time
+            </label>
+          </div>
+          ${isOverTime ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">Spans multiple periods — requires phasing before CO transfer</span>` : ''}
+        </div>
+        ${isOverTime ? `
+        <div class="meta-field">
+          <label>Phasing Method</label>
+          <select onchange="Matrix.updateEventField('${event.id}', 'phasingMethod', this.value)">
+            ${phasingOpts}
+          </select>
+          ${phasing && typeof PHASING_METHODS !== 'undefined' && PHASING_METHODS[phasing]
+            ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">${PHASING_METHODS[phasing].description}</span>` : ''}
+        </div>
+        <div class="meta-field">
+          <div style="font-size:11px;padding:8px;background:var(--bg-alt);border-radius:6px;line-height:1.6;border-left:3px solid #7c3aed">
+            <strong style="font-size:11px;display:block;margin-bottom:4px">Over-time event — two-layer star schema</strong>
+            <span style="color:var(--text-muted);font-size:11px">
+              Layer 1 (this event): range plan fact with <code>plan_start_period</code> + <code>plan_end_period</code> FKs and total amount.<br>
+              Layer 2: phased plan fact with <code>plan_period</code> FK per period — create via
+              <a href="#" onclick="Matrix.generatePhasedEvent('${event.id}');return false" style="color:#7c3aed">Generate phased output event →</a>
+            </span>
+          </div>
+        </div>` : ''}` : ''}
+        <div class="meta-field">
           <label>Business Areas</label>
           <div class="ba-tags">
             ${assignedTags}
@@ -416,6 +633,27 @@ const Matrix = {
                 ${addMenu}
               </select>` : ''}
           </div>
+        </div>
+        <div class="meta-field meta-field-full">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label style="margin-bottom:0">GL Account Mapping</label>
+            <button class="btn-sm" onclick="Matrix._addGlMapping('${event.id}')">+ Add Range</button>
+          </div>
+          ${(event.glMappings || []).length === 0 ? `<div style="font-size:11px;color:var(--text-subtle)">No GL mappings — use this to document which GL accounts / cost element ranges this event's measures post to.</div>` : ''}
+          ${(event.glMappings || []).map(m => `
+            <div class="gl-mapping-row" data-mapping-id="${m.id}">
+              <input class="cell-input" style="flex:2;font-size:12px" placeholder="Label (e.g. Cost postings)"
+                value="${this._esc(m.label)}" onblur="Matrix._updateGlMapping('${event.id}', '${m.id}', 'label', this.value)">
+              <input class="cell-input" style="flex:1;font-size:12px;font-family:monospace" placeholder="From"
+                value="${this._esc(m.accountFrom)}" onblur="Matrix._updateGlMapping('${event.id}', '${m.id}', 'accountFrom', this.value)">
+              <span style="font-size:11px;color:var(--text-subtle)">–</span>
+              <input class="cell-input" style="flex:1;font-size:12px;font-family:monospace" placeholder="To"
+                value="${this._esc(m.accountTo)}" onblur="Matrix._updateGlMapping('${event.id}', '${m.id}', 'accountTo', this.value)">
+              <input class="cell-input" style="flex:1;font-size:12px" placeholder="Cost elem. group"
+                value="${this._esc(m.costElementGroup)}" onblur="Matrix._updateGlMapping('${event.id}', '${m.id}', 'costElementGroup', this.value)">
+              <button class="btn-icon" onclick="Matrix._deleteGlMapping('${event.id}', '${m.id}')" title="Remove mapping" style="color:var(--danger)">✕</button>
+            </div>
+          `).join('')}
         </div>
         <div class="meta-field" style="margin-left:auto;text-align:right">
           <label>KPI Notes</label>
@@ -499,6 +737,60 @@ const Matrix = {
     event.grain = grain;
     Storage.saveEvent(project.id, event);
     this.renderEvent(eventId);
+  },
+
+  updateEventPurpose(eventId, purpose) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    event.eventPurpose = purpose;
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
+  // Generic updater for event-level fields (temporalType, phasingMethod, planVersionId, etc.)
+  updateEventField(eventId, field, value) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    event[field] = value;
+    Storage.saveEvent(project.id, event);
+    this.renderEvent(eventId);
+  },
+
+  // Creates a linked phased-output event pre-populated for Layer 2 (plan_period grain)
+  generatePhasedEvent(sourceEventId) {
+    const found = Storage.getEvent(sourceEventId);
+    if (!found) return;
+    const { event, project } = found;
+    const newEvent = {
+      id: Storage.generateId(),
+      name: event.name + ' — Phased Output',
+      grain: 'plan_period',
+      eventPurpose: 'financial_plan',
+      temporalType: 'pointInTime',
+      phasingMethod: event.phasingMethod || '',
+      planVersionId: event.planVersionId || '',
+      glMappings: JSON.parse(JSON.stringify(event.glMappings || [])),
+      businessAreaIds: [...(event.businessAreaIds || [])],
+      columns: [
+        { id: Storage.generateId(), name: 'phased_plan_key', category: 'who', source: 'derived', dataType: 'INT', format: '', description: 'Surrogate key', notes: '', additiveType: 'fully_additive', requiredGrain: null, formula: '', budgetControl: false, plLineId: '', responsibilityType: 'none', publicDimensionId: '', isConformed: false, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'none', scdType: null, isNaturalKey: false, isSurrogateKey: true, sapTable: '', sapField: '', sapMigrationStatus: '', copaCharacteristic: '', copaValueField: '', dateKeyRole: '', joinDimension: '', isFinancialAnchor: false, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' },
+        { id: Storage.generateId(), name: 'period_key', category: 'when', source: 'derived', dataType: 'INT', format: '', description: 'FK → dim_sap_fiscal_calendar.period_key — financial anchor', notes: '', additiveType: 'fully_additive', requiredGrain: null, formula: '', budgetControl: false, plLineId: '', responsibilityType: 'none', publicDimensionId: 'dim_sap_fiscal_calendar', isConformed: true, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'none', scdType: null, isNaturalKey: false, isSurrogateKey: false, sapTable: '', sapField: '', sapMigrationStatus: '', copaCharacteristic: '', copaValueField: '', dateKeyRole: 'plan_period', joinDimension: 'dim_sap_fiscal_calendar', isFinancialAnchor: true, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' },
+        { id: Storage.generateId(), name: 'plan_version_key', category: 'why', source: 'derived', dataType: 'INT', format: '', description: 'FK → dim_plan_version', notes: '', additiveType: 'fully_additive', requiredGrain: null, formula: '', budgetControl: false, plLineId: '', responsibilityType: 'none', publicDimensionId: 'dim_plan_version', isConformed: true, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'none', scdType: null, isNaturalKey: false, isSurrogateKey: false, sapTable: '', sapField: '', sapMigrationStatus: '', copaCharacteristic: '', copaValueField: '', dateKeyRole: '', joinDimension: '', isFinancialAnchor: false, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' },
+        { id: Storage.generateId(), name: 'phasing_factor', category: 'how_many', source: 'derived', dataType: 'DECIMAL', format: '', description: 'Period weight applied to total plan amount (e.g. 0.0833 for even/12)', notes: '', additiveType: 'non_additive', requiredGrain: null, formula: 'total_plan_amount × phasing_weight', budgetControl: false, plLineId: '', responsibilityType: 'none', publicDimensionId: '', isConformed: false, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'none', scdType: null, isNaturalKey: false, isSurrogateKey: false, sapTable: '', sapField: '', sapMigrationStatus: '', copaCharacteristic: '', copaValueField: '', dateKeyRole: '', joinDimension: '', isFinancialAnchor: false, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' },
+        { id: Storage.generateId(), name: 'period_plan_amount', category: 'how_many', source: 'derived', dataType: 'DECIMAL', format: '', description: 'Phased period amount = total_plan_amount × phasing_factor', notes: '', additiveType: 'fully_additive', requiredGrain: null, formula: 'total_plan_amount × phasing_factor', budgetControl: true, plLineId: '', responsibilityType: 'none', publicDimensionId: '', isConformed: false, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'forecast_target', scdType: null, isNaturalKey: false, isSurrogateKey: false, sapTable: 'ACDOCA', sapField: 'KSL', sapMigrationStatus: 'both', copaCharacteristic: '', copaValueField: '', dateKeyRole: '', joinDimension: '', isFinancialAnchor: false, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' },
+        { id: Storage.generateId(), name: 'co_transfer_status', category: 'why', source: 'derived', dataType: 'VARCHAR', format: '', description: "pending | transferred | rejected — tracks whether this row has been uploaded to SAP CO planning", notes: '', additiveType: 'fully_additive', requiredGrain: null, formula: '', budgetControl: false, plLineId: '', responsibilityType: 'none', publicDimensionId: '', isConformed: false, ownerId: '', cashFlowLineId: '', isCashBased: false, mlTag: 'none', scdType: null, isNaturalKey: false, isSurrogateKey: false, sapTable: '', sapField: '', sapMigrationStatus: '', copaCharacteristic: '', copaValueField: '', dateKeyRole: '', joinDimension: '', isFinancialAnchor: false, glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '' }
+      ]
+    };
+    if (!project.events) project.events = [];
+    project.events.push(newEvent);
+    Storage.saveEvent(project.id, newEvent);
+    // Navigate to the new event
+    location.hash = `matrix/${project.id}`;
+    setTimeout(() => {
+      const el = document.getElementById(`event-${newEvent.id}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
   },
 
   addBA(eventId, baId) {
