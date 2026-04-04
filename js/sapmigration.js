@@ -277,6 +277,8 @@ const SapMigration = (() => {
       'PROJ/PRPS': 'PS — Project System', 'AFKO/AFPO': 'PS — Project System',
       'MPLA/MPOS': 'PM — Plant Maintenance', 'QMEL': 'PM — Plant Maintenance', 'AUFK': 'PM — Plant Maintenance',
       'VIQMEL': 'CS — Customer Service',
+      'IFLOT': 'PM — Plant Maintenance', 'EQUI': 'PM — Plant Maintenance',
+      'VBRK/VBRP': 'SD — Sales & Distribution',
       'VBAK': 'SD — Sales & Distribution', 'VBAP': 'SD — Sales & Distribution', 'VEDA': 'SD — Sales & Distribution',
       'VIOB00': 'RE-FX — Real Estate', 'VIOB20': 'RE-FX — Real Estate',
       'VIOB40': 'RE-FX — Real Estate', 'VIRE00': 'RE-FX — Real Estate',

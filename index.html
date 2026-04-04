@@ -346,6 +346,9 @@
       { eccTable: 'AUFK',      s4Table: 'AUFK (unchanged)',          description: 'Order Master (PM/CS/CO)',    note: 'AUFK remains for all order types. Actual costs now in ACDOCA; AFKO/AFPO for operations.' },
       // ── CS — Customer Service ────────────────────────────────────────────────────
       { eccTable: 'VIQMEL',    s4Table: 'VIQMEL / QMEL',            description: 'CS Service Notification',   note: 'CS notifications use same QMEL table. S/4 adds I_ServiceOrderItem CDS view.' },
+      { eccTable: 'IFLOT',     s4Table: 'IFLOT (unchanged)',         description: 'PM Functional Location',    note: 'Structure unchanged. CDS view I_FunctionalLocation available for S/4 Fiori apps. TPLNR hierarchy used by both PM and CS.' },
+      { eccTable: 'EQUI',      s4Table: 'EQUI (unchanged)',          description: 'PM Equipment Master',       note: 'Equipment table unchanged. Links to FI-AA asset via EQUI.ANLNR. CDS view I_Equipment for S/4. Warranty dates and counter readings in EQUZ/ANLZU.' },
+      { eccTable: 'VBRK/VBRP', s4Table: 'VBRK/VBRP (unchanged)',    description: 'SD Billing Document Header/Item', note: 'Billing tables unchanged. Revenue posted to ACDOCA at billing. DP90 resource-related billing (DPVB) creates VBRK from CS service order confirmed quantities.' },
       // ── SD — Sales & Distribution ────────────────────────────────────────────────
       { eccTable: 'VBAK',      s4Table: 'VBAK (unchanged)',          description: 'SD Sales Order Header',     note: 'Tables remain. S/4 adds CDS view I_SalesOrder. VBAPn profitability segment links to ACDOCA via PAOBJNR.' },
       { eccTable: 'VBAP',      s4Table: 'VBAP (unchanged)',          description: 'SD Sales Order Item',       note: 'Item table unchanged. Material ledger integration enhanced in S/4 (actual COGS posted to ACDOCA).' },
@@ -710,20 +713,78 @@
       },
       {
         id: 'dim_service_order', name: 'Service Order (CS)', category: 'why', icon: '🛠️',
-        description: 'SAP CS Service Order (AUFK, order category 40) — manages customer-facing repair, field service, and warranty work. Linked to service notification (QMEL) and drives billing via DP90 resource-related billing.',
+        description: 'SAP CS Service Order (AUFK, order category 40) — manages customer-facing repair, field service, and warranty work. Linked to PM objects (equipment/functional location) via the notification, billed via DP90 resource-related billing to an SD billing document, and settled to CO-PA/ACDOCA.',
         columns: [
           { name: 'service_order_key',         dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
-          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — service order number',                       isKey: false, responsibilityType: 'none' },
-          { name: 'order_type',                dataType: 'VARCHAR', description: 'CS order type (AUART): e.g. SM01=Repair, SM02=Warranty', isKey: false, responsibilityType: 'none' },
-          { name: 'service_type',              dataType: 'VARCHAR', description: 'Repair | Warranty | Installation | Field Service | Consulting', isKey: false, responsibilityType: 'none' },
-          { name: 'customer',                  dataType: 'VARCHAR', description: 'Service recipient (KUNNR)',                              isKey: false, responsibilityType: 'none' },
+          { name: 'aufnr',                     dataType: 'VARCHAR', description: 'SAP AUFNR — service order number (AUFK.AUFNR)',           isKey: false, responsibilityType: 'none' },
+          { name: 'order_type',                dataType: 'VARCHAR', description: 'CS order type (AUART): SM01=Repair, SM02=Warranty, SM03=Installation, SM04=Consulting', isKey: false, responsibilityType: 'none' },
+          { name: 'service_type',              dataType: 'VARCHAR', description: 'Repair | Warranty | Installation | Field Service | Consulting | Inspection', isKey: false, responsibilityType: 'none' },
+          // ── Customer links ──
+          { name: 'customer',                  dataType: 'VARCHAR', description: 'Service recipient — business partner / KUNNR',           isKey: false, responsibilityType: 'none' },
           { name: 'sold_to_party',             dataType: 'VARCHAR', description: 'Sold-to party (can differ from service recipient)',       isKey: false, responsibilityType: 'none' },
-          { name: 'service_notification',      dataType: 'VARCHAR', description: 'Source PM/CS notification number (QMNUM)',               isKey: false, responsibilityType: 'none' },
-          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Cost centre responsible for service delivery',           isKey: false, responsibilityType: 'cost_centre' },
-          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for service revenue recognition',          isKey: false, responsibilityType: 'profit_centre' },
-          { name: 'billing_indicator',         dataType: 'VARCHAR', description: 'Billable | Warranty | Internal | Not Billable',          isKey: false, responsibilityType: 'none' },
-          { name: 'order_status',              dataType: 'VARCHAR', description: 'Created | Released | In-Progress | Completed | Settled', isKey: false, responsibilityType: 'none' },
-          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the service order is open',                     isKey: false, responsibilityType: 'none' }
+          { name: 'service_contract',          dataType: 'VARCHAR', description: 'SD service contract (VBELN) covering this order, if any', isKey: false, responsibilityType: 'none' },
+          // ── PM object links ──
+          { name: 'service_notification',      dataType: 'VARCHAR', description: 'Source CS/PM notification (QMNUM) that triggered the order', isKey: false, responsibilityType: 'none' },
+          { name: 'equipment',                 dataType: 'VARCHAR', description: 'Equipment number (EQUNR) the service is performed on',   isKey: false, responsibilityType: 'none' },
+          { name: 'functional_location',       dataType: 'VARCHAR', description: 'Functional location (TPLNR) — structural hierarchy node', isKey: false, responsibilityType: 'none' },
+          { name: 'source_maintenance_plan',   dataType: 'VARCHAR', description: 'Maintenance plan (MPLA.WAPL) if order was auto-generated', isKey: false, responsibilityType: 'none' },
+          // ── SD billing link ──
+          { name: 'sd_billing_document',       dataType: 'VARCHAR', description: 'SD billing document (VBRK.VBELN) created via DP90 resource-related billing', isKey: false, responsibilityType: 'none' },
+          { name: 'billing_type',              dataType: 'VARCHAR', description: 'DP90=Resource-Related | Fixed Price | Milestone | Warranty | Not Billable', isKey: false, responsibilityType: 'none' },
+          { name: 'billing_indicator',         dataType: 'VARCHAR', description: 'Billable | Warranty | Internal | Not Billable (AUFK.FKART)', isKey: false, responsibilityType: 'none' },
+          // ── SLA & dispatch ──
+          { name: 'sla_priority',              dataType: 'VARCHAR', description: 'SLA priority: Emergency | High | Medium | Low (PRIOK)',  isKey: false, responsibilityType: 'none' },
+          { name: 'response_time_hrs',         dataType: 'DECIMAL', description: 'Target response time in hours per SLA',                  isKey: false, responsibilityType: 'none' },
+          { name: 'technician_work_centre',    dataType: 'VARCHAR', description: 'Executing work centre (ARBPL) — technician dispatch',    isKey: false, responsibilityType: 'none' },
+          { name: 'scheduled_start_date',      dataType: 'DATE',    description: 'Planned start date for service execution (AUFK.GSTRP)',  isKey: false, responsibilityType: 'none' },
+          { name: 'actual_completion_date',    dataType: 'DATE',    description: 'Actual completion date (AUFK.IDAT2)',                    isKey: false, responsibilityType: 'none' },
+          // ── Flags ──
+          { name: 'is_warranty',               dataType: 'BOOLEAN', description: 'True if this order is executed under warranty',          isKey: false, responsibilityType: 'none' },
+          { name: 'spare_parts_required',      dataType: 'BOOLEAN', description: 'True if spare parts are planned/issued on this order',   isKey: false, responsibilityType: 'none' },
+          // ── CO assignment ──
+          { name: 'responsible_cost_centre',   dataType: 'VARCHAR', description: 'Cost centre bearing service delivery costs',             isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'profit_centre',             dataType: 'VARCHAR', description: 'Profit centre for service revenue/cost recognition',     isKey: false, responsibilityType: 'profit_centre' },
+          { name: 'order_status',              dataType: 'VARCHAR', description: 'Created | Released | In-Progress | Technically Completed | Settled', isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the service order is still open',               isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_functional_location', name: 'Functional Location (PM)', category: 'where', icon: '📍',
+        description: 'SAP PM Functional Location (TPLNR / IFLOT) — hierarchical technical structure representing where maintenance is performed (e.g. Plant > Line > Machine > Component). The primary spatial organisation for PM and CS objects.',
+        columns: [
+          { name: 'func_loc_key',              dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'tplnr',                     dataType: 'VARCHAR', description: 'SAP TPLNR — functional location code (IFLOT.TPLNR)',     isKey: false, responsibilityType: 'none' },
+          { name: 'func_loc_description',      dataType: 'VARCHAR', description: 'Short description of the functional location',           isKey: false, responsibilityType: 'none' },
+          { name: 'superior_func_loc',         dataType: 'VARCHAR', description: 'Parent functional location (IFLOT.TPLMA)',               isKey: false, responsibilityType: 'none' },
+          { name: 'structure_indicator',       dataType: 'VARCHAR', description: 'Defines hierarchy depth and character mask for TPLNR',   isKey: false, responsibilityType: 'none' },
+          { name: 'category',                  dataType: 'VARCHAR', description: 'Functional location category (IFLOT.FLTYP)',             isKey: false, responsibilityType: 'none' },
+          { name: 'maintenance_plant',         dataType: 'VARCHAR', description: 'Plant responsible for maintenance (IFLOT.SWERK)',         isKey: false, responsibilityType: 'none' },
+          { name: 'planning_plant',            dataType: 'VARCHAR', description: 'Maintenance planning plant (IFLOT.IWERK)',               isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre',               dataType: 'VARCHAR', description: 'Cost centre absorbing maintenance costs (IFLOT.KOSTL)',   isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'responsible_work_centre',   dataType: 'VARCHAR', description: 'Default work centre (IFLOT.ARBPL)',                      isKey: false, responsibilityType: 'none' },
+          { name: 'equipment_count',           dataType: 'INT',     description: 'Number of equipment items installed at this location',   isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the functional location is active',              isKey: false, responsibilityType: 'none' }
+        ]
+      },
+      {
+        id: 'dim_equipment', name: 'Equipment (PM)', category: 'what', icon: '⚙️',
+        description: 'SAP PM Equipment (EQUNR / EQUI) — an individual physical asset that is maintained independently. Can be installed at a functional location. Drives equipment-level maintenance history, warranty tracking, and mean-time-between-failure analysis.',
+        columns: [
+          { name: 'equipment_key',             dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
+          { name: 'equnr',                     dataType: 'VARCHAR', description: 'SAP EQUNR — equipment number (EQUI.EQUNR)',              isKey: false, responsibilityType: 'none' },
+          { name: 'equipment_description',     dataType: 'VARCHAR', description: 'Short description of the equipment item',               isKey: false, responsibilityType: 'none' },
+          { name: 'equipment_category',        dataType: 'VARCHAR', description: 'EQUI.EQTYP: M=Machine, E=Electrical, V=Vehicle, I=IT, L=Leased', isKey: false, responsibilityType: 'none' },
+          { name: 'object_type',               dataType: 'VARCHAR', description: 'Equipment object type (EQUI.EQART) — engineering classification', isKey: false, responsibilityType: 'none' },
+          { name: 'manufacturer',              dataType: 'VARCHAR', description: 'Manufacturer name (EQUI.HERST)',                         isKey: false, responsibilityType: 'none' },
+          { name: 'model_number',              dataType: 'VARCHAR', description: 'Manufacturer model/part number',                         isKey: false, responsibilityType: 'none' },
+          { name: 'serial_number',             dataType: 'VARCHAR', description: 'Serial number (EQUI.SERGE)',                            isKey: false, responsibilityType: 'none' },
+          { name: 'functional_location',       dataType: 'VARCHAR', description: 'Current installation functional location (TPLNR)',       isKey: false, responsibilityType: 'none' },
+          { name: 'maintenance_plant',         dataType: 'VARCHAR', description: 'Plant responsible for this equipment (EQUI.SWERK)',      isKey: false, responsibilityType: 'none' },
+          { name: 'cost_centre',               dataType: 'VARCHAR', description: 'Cost centre bearing equipment maintenance costs (EQUI.KOSTL)', isKey: false, responsibilityType: 'cost_centre' },
+          { name: 'asset_number',              dataType: 'VARCHAR', description: 'FI-AA asset number if equipment is capitalised (EQUI.ANLNR)', isKey: false, responsibilityType: 'none' },
+          { name: 'installation_date',         dataType: 'DATE',    description: 'Date the equipment was installed at current location',   isKey: false, responsibilityType: 'none' },
+          { name: 'warranty_end_date',         dataType: 'DATE',    description: 'Manufacturer warranty expiry date',                     isKey: false, responsibilityType: 'none' },
+          { name: 'is_active',                 dataType: 'BOOLEAN', description: 'Whether the equipment is in active service',            isKey: false, responsibilityType: 'none' }
         ]
       },
 
@@ -1382,6 +1443,47 @@
               { id: id(), name: 'Allocation Qty',       category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Quantity of activity allocated',          notes: 'COEP.MENGE', sapTable: 'COEP', sapField: 'MENGE', sapMigrationStatus: 'both' },
               { id: id(), name: 'Allocated Amount LC',  category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Cost amount in local currency (WKGBTR)', notes: 'COEP.WKGBTR / ACDOCA.DMBTR', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed' },
               { id: id(), name: 'COSS Period Total',    category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'CO period total from COSS table',        notes: 'COSS — retired in S/4; query ACDOCA directly', sapTable: 'COSS', sapField: 'WTGES', sapMigrationStatus: 'ecc_only' },
+            ]
+          },
+
+          // ── Event 4: CS Service Order Billing ─────────────
+          {
+            id: id(),
+            name: 'CS Service Order Billing',
+            description: 'A CS service order is executed and billed to a customer via DP90 resource-related billing. Costs (labour, materials, expenses) are collected on the order, then an SD billing document is created and the order is settled to CO-PA/ACDOCA. Links PM objects (equipment, functional location) with SD billing and CO profitability.',
+            columns: [
+              // WHO — parties
+              { id: id(), name: 'Customer',              category: 'who',      dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Customer being billed for the service (KUNNR)',        notes: 'AUFK/VBPA.KUNNR — Business Partner in S/4', sapTable: 'AUFK', sapField: 'KUNNR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Technician Work Centre', category: 'who',     dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Work centre executing the service (ARBPL)',            notes: 'AUFK.ARBPL — unchanged in S/4', sapTable: 'AUFK', sapField: 'ARBPL', sapMigrationStatus: 'both' },
+              // WHAT — PM object + what was done
+              { id: id(), name: 'Service Order',         category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc',  description: 'CS service order number (AUFNR)',                       notes: 'AUFK.AUFNR — ACDOCA.AUFNR in S/4 for cost postings', sapTable: 'AUFK', sapField: 'AUFNR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Order Type',            category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc',  description: 'CS order type: SM01=Repair, SM02=Warranty, SM03=Install', notes: 'AUFK.AUART', sapTable: 'AUFK', sapField: 'AUART', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Equipment',             category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Equipment item serviced (EQUNR)',                       notes: 'AUFK.EQUNR / EQUI — unchanged in S/4', sapTable: 'AUFK', sapField: 'EQUNR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Service Notification',  category: 'what',     dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Source CS/PM notification that triggered the order',    notes: 'VIQMEL.QMNUM', sapTable: 'VIQMEL', sapField: 'QMNUM', sapMigrationStatus: 'both' },
+              // WHEN — timeline
+              { id: id(), name: 'Order Creation Date',   category: 'when',     dataType: 'DATE',    source: 'sap_ecc',  description: 'Date the service order was created (AUFK.ERDAT)',       notes: 'AUFK.ERDAT', sapTable: 'AUFK', sapField: 'ERDAT', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Actual Completion Date', category: 'when',    dataType: 'DATE',    source: 'sap_ecc',  description: 'Actual completion date (AUFK.IDAT2)',                   notes: 'AUFK.IDAT2 — unchanged', sapTable: 'AUFK', sapField: 'IDAT2', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Billing Date',          category: 'when',     dataType: 'DATE',    source: 'sap_ecc',  description: 'Date of SD billing document (VBRK.FKDAT)',              notes: 'VBRK.FKDAT / ACDOCA.BUDAT at billing posting', sapTable: 'VBRK', sapField: 'FKDAT', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Fiscal Period',         category: 'when',     dataType: 'VARCHAR', source: 'derived',  description: 'Fiscal period of revenue recognition',                  notes: 'Derived from Billing Date via fiscal calendar' },
+              // WHERE — PM location + CO org
+              { id: id(), name: 'Functional Location',   category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Physical location where service was performed (TPLNR)', notes: 'IFLOT.TPLNR — unchanged in S/4', sapTable: 'IFLOT', sapField: 'TPLNR', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Profit Centre',         category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Profit centre for revenue & cost recognition (PRCTR)',  notes: 'AUFK.PRCTR / ACDOCA.PRCTR', sapTable: 'AUFK', sapField: 'PRCTR', sapMigrationStatus: 'both', copaCharacteristic: 'WW002' },
+              { id: id(), name: 'Company Code',          category: 'where',    dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Legal entity (BUKRS)',                                  notes: 'AUFK.BUKRS / ACDOCA.RBUKRS', sapTable: 'AUFK', sapField: 'BUKRS', sapMigrationStatus: 'both' },
+              // HOW — billing method
+              { id: id(), name: 'Billing Type',          category: 'how',      dataType: 'VARCHAR', source: 'sap_ecc',  description: 'DP90=Resource-Related | Fixed Price | Warranty | Manual', notes: 'Determined by CS billing indicator on order', sapTable: 'AUFK', sapField: 'FKART', sapMigrationStatus: 'both' },
+              { id: id(), name: 'SD Billing Document',   category: 'how',      dataType: 'VARCHAR', source: 'sap_ecc',  description: 'SD billing document (VBELN) created via DP90',          notes: 'VBRK.VBELN — links service order to SD billing', sapTable: 'VBRK', sapField: 'VBELN', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Service Contract',      category: 'how',      dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Covering service contract (VBELN) if applicable',        notes: 'SD outline agreement for contracted service', sapTable: 'VBAK', sapField: 'VBELN', sapMigrationStatus: 'both' },
+              // WHY — reason for service
+              { id: id(), name: 'SLA Priority',          category: 'why',      dataType: 'VARCHAR', source: 'sap_ecc',  description: 'Service priority: Emergency | High | Medium | Low',      notes: 'AUFK.PRIOK', sapTable: 'AUFK', sapField: 'PRIOK', sapMigrationStatus: 'both' },
+              { id: id(), name: 'Is Warranty',           category: 'why',      dataType: 'BOOLEAN', source: 'sap_ecc',  description: 'True if service is covered under manufacturer warranty',  notes: 'Derived from order type or warranty master' },
+              // HOW MANY — financials
+              { id: id(), name: 'Labour Cost',           category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc',  description: 'Actual labour cost posted to order',                     notes: 'COEP.WKGBTR by cost element / ACDOCA.KSL in S/4', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed', copaValueField: 'VVB10' },
+              { id: id(), name: 'Materials Cost',        category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc',  description: 'Goods issue cost for spare parts / materials',           notes: 'COEP.WKGBTR by material cost element / ACDOCA', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed', copaValueField: 'VVB11' },
+              { id: id(), name: 'External Services Cost', category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc', description: 'Cost of externally procured services (subcontracting)',   notes: 'COEP.WKGBTR by external cost element', sapTable: 'COEP', sapField: 'WKGBTR', sapMigrationStatus: 'changed' },
+              { id: id(), name: 'Total Order Cost',      category: 'how_many', dataType: 'DECIMAL', source: 'derived',  description: 'Labour + Materials + External Services',                 notes: 'Derived: sum of cost components' },
+              { id: id(), name: 'Billed Revenue',        category: 'how_many', dataType: 'DECIMAL', source: 'sap_ecc',  description: 'Amount invoiced to customer on SD billing document',     notes: 'VBRP.NETWR / ACDOCA.KSL at revenue posting', sapTable: 'VBRP', sapField: 'NETWR', sapMigrationStatus: 'both', copaValueField: 'VVB01' },
+              { id: id(), name: 'Service Margin',        category: 'how_many', dataType: 'DECIMAL', source: 'derived',  description: 'Billed Revenue minus Total Order Cost',                  notes: 'Derived: Billed Revenue - Total Order Cost' },
+              { id: id(), name: 'Response Time Actual', category: 'how_many',  dataType: 'DECIMAL', source: 'derived',  description: 'Actual hours from notification to order release',        notes: 'Derived: Order Creation Date - Notification Date' },
             ]
           }
         ]
