@@ -9,6 +9,10 @@ const Diagram = {
   render(event) {
     const app = document.getElementById('app');
 
+    // Dimension template lookup for conformed dim names
+    const dimTemplates = (typeof Storage !== 'undefined' && Storage.getAllDimTemplates)
+      ? Storage.getAllDimTemplates() : [];
+
     // Group columns by category
     const byCategory = {};
     event.columns.forEach(col => {
@@ -22,19 +26,50 @@ const Diagram = {
     // --- Build fact table rows ---
     const grain = event.grain || 'transaction';
     const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, short: 'TXN', color: '#6b7280' };
+    const purpose = event.eventPurpose || 'actuals';
+    const purposeInfo = (typeof EVENT_PURPOSES !== 'undefined' && EVENT_PURPOSES[purpose]) || null;
     const factLabel = `${event.name} Fact`;
+
     const factRows = [];
     factRows.push({ text: 'event_key (PK)', key: true });
     factRows.push({ text: `Grain: ${grainInfo.label}`, grain: true, color: grainInfo.color });
-    dimEntries.forEach(([cat]) => {
-      const label = CATEGORIES[cat]?.label || cat;
-      factRows.push({ text: `${cat}_key (FK → ${label} Dim)`, fk: true });
+    if (purposeInfo && purpose !== 'actuals') {
+      factRows.push({ text: `Purpose: ${purposeInfo.label}`, grain: true, color: purposeInfo.color });
+    }
+
+    // FK rows — use actual column names and dim template names where available
+    dimEntries.forEach(([cat, cols]) => {
+      // Find the primary FK column for this category (natural key or surrogate key, else first col)
+      const fkCol = cols.find(c => c.isNaturalKey || c.isFinancialAnchor) || cols[0];
+      const colName = (fkCol && fkCol.name) ? fkCol.name : `${cat}_key`;
+      const anchorFlag = fkCol && fkCol.isFinancialAnchor ? ' ⚓' : '';
+
+      // Determine target dim name
+      let dimTargetName;
+      if (fkCol && fkCol.publicDimensionId) {
+        const tmpl = dimTemplates.find(d => d.id === fkCol.publicDimensionId);
+        dimTargetName = tmpl ? tmpl.name : (CATEGORIES[cat]?.label || cat) + ' Dim';
+      } else {
+        dimTargetName = (CATEGORIES[cat]?.label || cat) + ' Dim';
+      }
+
+      const dateRole = (fkCol && fkCol.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[fkCol.dateKeyRole])
+        ? ` [${DATE_KEY_ROLES[fkCol.dateKeyRole].label}]` : '';
+
+      factRows.push({
+        text: `${colName}${anchorFlag} → ${dimTargetName}${dateRole}`,
+        fk: true,
+        isAnchor: !!(fkCol && fkCol.isFinancialAnchor),
+        cat
+      });
     });
+
     measures.forEach(m => {
       const at = m.additiveType || 'fully_additive';
       const atInfo = (typeof ADDITIVE_TYPES !== 'undefined' && ADDITIVE_TYPES[at]) || { short: 'FA', color: '#166534' };
       const bcFlag = m.budgetControl ? ' 💰' : '';
-      factRows.push({ text: `${m.name} [${m.dataType}]${bcFlag}`, measure: true, additiveShort: atInfo.short, additiveColor: atInfo.color });
+      const glTag = m.glAccount ? ` [GL:${m.glAccount}]` : (m.glAccountRangeFrom ? ` [GL:${m.glAccountRangeFrom}–${m.glAccountRangeTo}]` : '');
+      factRows.push({ text: `${m.name} [${m.dataType}]${bcFlag}${glTag}`, measure: true, additiveShort: atInfo.short, additiveColor: atInfo.color });
     });
 
     // --- SVG canvas size ---
@@ -51,9 +86,27 @@ const Diagram = {
       const bx = cx + orbitR * Math.cos(angle);
       const by = cy + orbitR * Math.sin(angle);
       const catInfo = CATEGORIES[cat] || { label: cat, color: '#6b7280' };
-      const rows = cols.map(c => `${c.name} [${c.dataType}]`);
-      rows.unshift(`${cat}_key (PK)`);
-      return { cat, catInfo, bx, by, rows, angle };
+
+      // Use template name if all columns share a publicDimensionId
+      const sharedTemplateId = cols.every(c => c.publicDimensionId && c.publicDimensionId === cols[0].publicDimensionId)
+        ? cols[0].publicDimensionId : null;
+      const tmpl = sharedTemplateId ? dimTemplates.find(d => d.id === sharedTemplateId) : null;
+      const boxTitle = tmpl ? tmpl.name : (catInfo.label + ' Dim');
+      const isConformed = !!tmpl;
+
+      // Rows: show actual column names with data types and anchor flag
+      const rows = cols.map(c => {
+        const anchorFlag = c.isFinancialAnchor ? ' ⚓' : '';
+        const roleTag = (c.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[c.dateKeyRole])
+          ? ` (${DATE_KEY_ROLES[c.dateKeyRole].label})` : '';
+        return `${c.name}${anchorFlag} [${c.dataType}]${roleTag}`;
+      });
+      // Add a PK row using the first key column name if available, or cat_key
+      const pkCol = cols.find(c => c.isSurrogateKey || c.isNaturalKey);
+      const pkName = pkCol ? `${pkCol.name} (PK)` : `${cat}_key (PK)`;
+      rows.unshift(pkName);
+
+      return { cat, catInfo, bx, by, rows, angle, boxTitle, isConformed };
     });
 
     // --- Fact box height ---
@@ -137,11 +190,12 @@ const Diagram = {
         y: dim.by - dimBoxH / 2,
         w: this.BOX_WIDTH,
         h: dimBoxH,
-        title: `${dim.catInfo.label} Dim`,
+        title: dim.boxTitle,
         titleColor: dim.catInfo.color,
         rows: dim.rows,
         rowClass: 'dim-row',
-        cat: dim.cat
+        cat: dim.cat,
+        isConformed: dim.isConformed
       });
     });
 
@@ -176,106 +230,110 @@ const Diagram = {
     this._initPanZoom(document.getElementById('diagramContainer'), svg);
   },
 
-  _drawBox(svg, { x, y, w, h, title, titleColor, rows, isFact, factRows }) {
+  _drawBox(svg, { x, y, w, h, title, titleColor, rows, isFact, factRows, isConformed }) {
     const g = this._svgEl('g', { class: isFact ? 'fact-box' : 'dim-box' });
 
     // Drop shadow
-    const shadow = this._svgEl('rect', {
+    g.appendChild(this._svgEl('rect', {
       x: x + 3, y: y + 3, width: w, height: h,
       rx: 6, fill: 'rgba(0,0,0,0.08)'
-    });
-    g.appendChild(shadow);
+    }));
 
-    // Background
-    const bg = this._svgEl('rect', {
+    // Background — conformed dim boxes get a subtle tinted border
+    const strokeColor = isFact ? '#e85d04' : (isConformed ? titleColor : '#d1d5db');
+    const strokeWidth = isFact ? '2' : (isConformed ? '2' : '1.5');
+    g.appendChild(this._svgEl('rect', {
       x, y, width: w, height: h,
-      rx: 6,
-      fill: '#ffffff',
-      stroke: isFact ? '#e85d04' : '#d1d5db',
-      'stroke-width': isFact ? '2' : '1.5'
-    });
-    g.appendChild(bg);
+      rx: 6, fill: '#ffffff',
+      stroke: strokeColor, 'stroke-width': strokeWidth
+    }));
 
     // Header background
     const headerH = this.BOX_HEADER_H;
-    const header = this._svgEl('rect', {
-      x, y, width: w, height: headerH,
-      rx: 6, fill: titleColor
-    });
-    g.appendChild(header);
+    g.appendChild(this._svgEl('rect', { x, y, width: w, height: headerH, rx: 6, fill: titleColor }));
     // Cover bottom-rounded corners of header
-    const headerFix = this._svgEl('rect', {
-      x, y: y + headerH - 6, width: w, height: 6,
-      fill: titleColor
-    });
-    g.appendChild(headerFix);
+    g.appendChild(this._svgEl('rect', { x, y: y + headerH - 6, width: w, height: 6, fill: titleColor }));
 
-    // Title text
+    // Title text (truncate to fit)
+    const truncTitle = title.length > 24 ? title.slice(0, 22) + '…' : title;
     const titleEl = this._svgEl('text', {
-      x: x + w / 2, y: y + headerH / 2 + 5,
+      x: x + (isConformed && !isFact ? w / 2 - 8 : w / 2),
+      y: y + headerH / 2 + 5,
       'text-anchor': 'middle',
-      fill: '#ffffff',
-      'font-size': '12',
-      'font-weight': '600'
+      fill: '#ffffff', 'font-size': '12', 'font-weight': '600'
     });
-    titleEl.textContent = title;
+    titleEl.textContent = truncTitle;
     g.appendChild(titleEl);
 
+    // Conformed badge (⊛) in header for dimension boxes
+    if (isConformed && !isFact) {
+      const badge = this._svgEl('text', {
+        x: x + w - 10, y: y + headerH / 2 + 5,
+        'text-anchor': 'end', fill: 'rgba(255,255,255,0.85)',
+        'font-size': '11', 'font-weight': '700'
+      });
+      badge.textContent = '⊛';
+      g.appendChild(badge);
+    }
+
     // Divider
-    const divider = this._svgEl('line', {
-      x1: x, y1: y + headerH,
-      x2: x + w, y2: y + headerH,
-      stroke: '#e5e7eb',
-      'stroke-width': '1'
-    });
-    g.appendChild(divider);
+    g.appendChild(this._svgEl('line', {
+      x1: x, y1: y + headerH, x2: x + w, y2: y + headerH,
+      stroke: '#e5e7eb', 'stroke-width': '1'
+    }));
 
     // Rows
     rows.forEach((row, i) => {
-      const ry = y + headerH + this.BOX_PADDING / 2 + i * this.BOX_ROW_H + this.BOX_ROW_H * 0.72;
+      const rowY0 = y + headerH + this.BOX_PADDING / 2 + i * this.BOX_ROW_H;
+      const ry = rowY0 + this.BOX_ROW_H * 0.72;
 
-      // Row background for alternates
+      // Alternate row background
       if (i % 2 === 0) {
-        const rowBg = this._svgEl('rect', {
-          x: x + 1, y: y + headerH + this.BOX_PADDING / 2 + i * this.BOX_ROW_H,
-          width: w - 2, height: this.BOX_ROW_H,
-          fill: '#f9fafb'
-        });
-        g.appendChild(rowBg);
+        g.appendChild(this._svgEl('rect', {
+          x: x + 1, y: rowY0, width: w - 2, height: this.BOX_ROW_H, fill: '#f9fafb'
+        }));
       }
 
-      // Row icon / colour indicator
-      let rowFill = '#374151';
-      let prefix = '';
-      let rowBgOverride = null;
+      // Determine row styling
+      let rowFill = '#374151', prefix = '', rowBgOverride = null;
       if (isFact && factRows) {
         const fr = factRows[i];
-        if (fr?.key)   { rowFill = '#6b7280'; prefix = '🔑 '; }
-        else if (fr?.grain) { rowFill = fr.color || '#6b7280'; prefix = '⊕ '; rowBgOverride = `${fr.color}15`; }
-        else if (fr?.fk)   { rowFill = '#4a6cf7'; prefix = '🔗 '; }
+        if (fr?.key)     { rowFill = '#6b7280'; prefix = '🔑 '; }
+        else if (fr?.grain)   { rowFill = fr.color || '#6b7280'; prefix = '⊕ '; rowBgOverride = `${fr.color}15`; }
+        else if (fr?.fk)     {
+          rowFill = fr.isAnchor ? '#065f46' : '#4a6cf7';
+          prefix = fr.isAnchor ? '⚓ ' : '🔗 ';
+          if (fr.isAnchor) rowBgOverride = '#d1fae5';
+        }
         else if (fr?.measure) {
           rowFill = fr.additiveColor || '#e85d04';
           prefix = `[${fr.additiveShort || 'FA'}] `;
+          rowBgOverride = `${fr.additiveColor || '#e85d04'}12`;
         }
       } else if (i === 0) {
         rowFill = '#6b7280'; prefix = '🔑 ';
       }
 
       if (rowBgOverride) {
-        const overrideBg = this._svgEl('rect', {
-          x: x + 1, y: y + headerH + this.BOX_PADDING / 2 + i * this.BOX_ROW_H,
-          width: w - 2, height: this.BOX_ROW_H, fill: rowBgOverride
-        });
-        g.appendChild(overrideBg);
+        g.appendChild(this._svgEl('rect', {
+          x: x + 1, y: rowY0, width: w - 2, height: this.BOX_ROW_H, fill: rowBgOverride
+        }));
+      }
+
+      // Left colour stripe for measures
+      if (isFact && factRows && factRows[i]?.measure) {
+        g.appendChild(this._svgEl('rect', {
+          x: x + 1, y: rowY0, width: 3, height: this.BOX_ROW_H,
+          fill: factRows[i].additiveColor || '#e85d04'
+        }));
       }
 
       const txt = this._svgEl('text', {
-        x: x + 10, y: ry,
-        fill: rowFill,
-        'font-size': '11',
-        'font-family': 'monospace'
+        x: x + 12, y: ry,
+        fill: rowFill, 'font-size': '11', 'font-family': 'monospace'
       });
-      txt.textContent = (prefix + row).slice(0, 32) + (row.length > 30 ? '…' : '');
+      const fullText = prefix + row;
+      txt.textContent = fullText.length > 30 ? fullText.slice(0, 28) + '…' : fullText;
       g.appendChild(txt);
     });
 

@@ -118,145 +118,189 @@ const Architecture = {
       </div>`;
     }
 
-    // Category ordering from CATEGORIES object
+    // Dimension templates lookup (for conformed template names)
+    const dimTemplates = (typeof Storage !== 'undefined' && Storage.getAllDimTemplates)
+      ? Storage.getAllDimTemplates() : [];
+
     const catOrder = Object.keys(CATEGORIES).filter(k => k !== 'how_many');
 
-    // All dim categories that appear across ANY event
-    const allCats = catOrder.filter(cat =>
-      events.some(e => (e.columns || []).some(c => c.category === cat))
-    );
+    // ── Build dimension key map ─────────────────────────────────────────────
+    // Each unique dimension gets a key; grouped by publicDimensionId or (cat + name)
+    const dimMap = new Map();
 
-    // For each category, which events use it?
-    const catEventCount = {};
-    allCats.forEach(cat => {
-      catEventCount[cat] = events.filter(e =>
-        (e.columns || []).some(c => c.category === cat)
-      ).length;
+    events.forEach(event => {
+      (event.columns || []).forEach(col => {
+        if (col.category === 'how_many' || !col.category) return;
+        let key, label, isTemplate = false;
+        if (col.publicDimensionId) {
+          key = `tmpl:${col.publicDimensionId}`;
+          const tmpl = dimTemplates.find(d => d.id === col.publicDimensionId);
+          label = tmpl ? tmpl.name : (col.name || col.publicDimensionId);
+          isTemplate = true;
+        } else {
+          const norm = (col.name || col.category).toLowerCase().trim().replace(/\s+/g, '_');
+          key = `raw:${col.category}:${norm}`;
+          label = col.name || (CATEGORIES[col.category]?.label || col.category);
+        }
+        if (!dimMap.has(key)) {
+          dimMap.set(key, {
+            key, label, isTemplate,
+            category: col.category,
+            catInfo: CATEGORIES[col.category] || { label: col.category, color: '#6b7280' },
+            eventIds: new Set(),
+            colNames: new Set()
+          });
+        }
+        dimMap.get(key).eventIds.add(event.id);
+        dimMap.get(key).colNames.add(col.name);
+      });
     });
 
-    // Conformed = used in >=2 events
-    const conformedCats = new Set(allCats.filter(cat => catEventCount[cat] >= 2));
+    // Sort: category order first, then alphabetically within category
+    const dims = [...dimMap.values()].sort((a, b) => {
+      const ai = catOrder.indexOf(a.category), bi = catOrder.indexOf(b.category);
+      if (ai !== bi) return ai - bi;
+      return a.label.localeCompare(b.label);
+    });
+    dims.forEach(d => { d.isConformed = d.eventIds.size >= 2; });
 
-    // Grain order
-    const grainOrder = ['transaction', 'daily', 'weekly', 'monthly', 'quarterly', 'annual'];
+    // ── Sort events ─────────────────────────────────────────────────────────
+    const purposeOrder = ['actuals', 'budget', 'forecast', 'financial_plan', 'operational_plan'];
+    const grainOrder = ['transaction', 'daily', 'weekly', 'monthly', 'quarterly', 'annual',
+      'fiscal_period', 'plan_period', 'plan_range'];
     const sortedEvents = [...events].sort((a, b) => {
-      const ai = grainOrder.indexOf(a.grain || 'transaction');
-      const bi = grainOrder.indexOf(b.grain || 'transaction');
-      return ai - bi;
+      const ap = purposeOrder.indexOf(a.eventPurpose || 'actuals');
+      const bp = purposeOrder.indexOf(b.eventPurpose || 'actuals');
+      if (ap !== bp) return ap - bp;
+      const ag = grainOrder.indexOf(a.grain || 'transaction');
+      const bg = grainOrder.indexOf(b.grain || 'transaction');
+      return ag - bg;
     });
 
-    // Build table header
-    const headerCells = allCats.map(cat => {
-      const catInfo = CATEGORIES[cat] || { label: cat, color: '#6b7280' };
-      return `<th class="bus-cat-header">
-        <a href="#dimensions" title="View dimension library">
-          <span class="bus-cat-badge" style="background:${catInfo.color}20;color:${catInfo.color};border:1px solid ${catInfo.color}40;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">${this._esc(catInfo.label)}</span>
-        </a>
+    // ── Two-level header: category band row + dimension name row ────────────
+    const catGroups = [];
+    let lastCat = null;
+    dims.forEach(d => {
+      if (d.category !== lastCat) {
+        catGroups.push({ cat: d.category, span: 1 });
+        lastCat = d.category;
+      } else {
+        catGroups[catGroups.length - 1].span++;
+      }
+    });
+
+    const catBandRow = catGroups.map(g => {
+      const ci = CATEGORIES[g.cat] || { label: g.cat, color: '#6b7280' };
+      return `<th colspan="${g.span}" class="bus-cat-band"
+        style="background:${ci.color}12;border-bottom:2px solid ${ci.color};color:${ci.color}">
+        ${this._esc(ci.label)}
       </th>`;
     }).join('');
 
-    // Build rows
-    const rows = sortedEvents.map(event => {
-      const grainKey = event.grain || 'transaction';
-      const grainInfo = GRAINS[grainKey] || { label: grainKey, short: grainKey.toUpperCase(), color: '#6b7280', bg: '#f9fafb' };
-      const eventCats = new Set((event.columns || []).filter(c => c.category !== 'how_many').map(c => c.category));
+    const dimHeaderRow = dims.map(d => {
+      const borderColor = d.isConformed ? '#4a6cf7' : '#e5e7eb';
+      const tooltip = (d.isConformed ? `Conformed — shared by ${d.eventIds.size} events` : 'Private — 1 event')
+        + '\nColumns: ' + [...d.colNames].join(', ');
+      return `<th class="bus-dim-header" title="${this._esc(tooltip)}"
+        style="border-top:3px solid ${borderColor}">
+        <div class="bus-dim-name">${this._esc(d.label)}</div>
+        ${d.isConformed && d.isTemplate
+          ? `<span class="bus-tmpl-tag">⊛</span>`
+          : d.isConformed ? `<span class="bus-shared-tag">${d.eventIds.size}×</span>` : ''}
+      </th>`;
+    }).join('');
 
-      const cells = allCats.map(cat => {
-        if (eventCats.has(cat)) {
-          if (conformedCats.has(cat)) {
-            return `<td class="bus-cell-td"><span class="bus-cell bus-conformed" title="Conformed — shared by ${catEventCount[cat]} events">✓</span></td>`;
-          } else {
-            return `<td class="bus-cell-td"><span class="bus-cell bus-private" title="Private — only used by this event">○</span></td>`;
-          }
-        } else {
-          return `<td class="bus-cell-td"><span class="bus-cell bus-empty"></span></td>`;
-        }
+    // ── Event rows ───────────────────────────────────────────────────────────
+    const rows = sortedEvents.map(event => {
+      const grainKey   = event.grain || 'transaction';
+      const grainInfo  = (typeof GRAINS !== 'undefined' && GRAINS[grainKey]) || { short: grainKey, color: '#6b7280', bg: '#f9fafb' };
+      const purpose    = event.eventPurpose || 'actuals';
+      const purposeInfo = (typeof EVENT_PURPOSES !== 'undefined' && EVENT_PURPOSES[purpose])
+        || { short: purpose[0]?.toUpperCase() || 'A', color: '#166534', bg: '#dcfce7' };
+      const measureCount  = (event.columns || []).filter(c => c.category === 'how_many').length;
+      const anchorCount   = (event.columns || []).filter(c => c.isFinancialAnchor).length;
+      const glMappings    = (event.glMappings || []).length;
+
+      const cells = dims.map(d => {
+        if (!d.eventIds.has(event.id)) return `<td class="bus-cell-td bus-cell-empty"></td>`;
+        return d.isConformed
+          ? `<td class="bus-cell-td"><span class="bus-cell bus-conformed" title="Conformed — shared by ${d.eventIds.size} events">✓</span></td>`
+          : `<td class="bus-cell-td"><span class="bus-cell bus-private" title="Private to this event">○</span></td>`;
       }).join('');
 
       return `<tr>
         <th class="bus-event-header">
-          <a href="#event/${event.id}" style="color:inherit;text-decoration:none;font-weight:600">${this._esc(event.name)}</a>
-          <span class="grain-badge" style="background:${grainInfo.bg};color:${grainInfo.color};margin-left:6px;font-size:10px">${grainInfo.short}</span>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            <a href="#event/${event.id}" class="bus-event-link">${this._esc(event.name)}</a>
+            <span class="grain-badge" style="background:${grainInfo.bg};color:${grainInfo.color}">${grainInfo.short}</span>
+            ${purpose !== 'actuals'
+              ? `<span class="purpose-badge" style="background:${purposeInfo.bg};color:${purposeInfo.color}">${purposeInfo.short}</span>`
+              : ''}
+            ${anchorCount ? `<span class="bus-anchor-flag" title="Has financial anchor date">⚓</span>` : ''}
+            ${glMappings  ? `<span class="bus-gl-flag" title="${glMappings} GL mapping${glMappings !== 1 ? 's' : ''}">GL</span>` : ''}
+          </div>
+          <div class="bus-event-meta">${measureCount} measure${measureCount !== 1 ? 's' : ''} · ${(event.columns || []).filter(c => c.category !== 'how_many').length} dims</div>
         </th>
         ${cells}
       </tr>`;
     }).join('');
 
-    // Summary row
-    const summaryCells = allCats.map(cat => {
-      const count = catEventCount[cat];
-      return `<td class="bus-cell-td" style="text-align:center;font-size:12px;font-weight:600;color:${conformedCats.has(cat) ? '#4a6cf7' : '#9ca3af'}">${count}</td>`;
-    }).join('');
+    // ── Summary footer ──────────────────────────────────────────────────────
+    const summaryCells = dims.map(d =>
+      `<td class="bus-cell-td" style="text-align:center;font-size:12px;font-weight:700;color:${d.isConformed ? '#4a6cf7' : '#9ca3af'}">${d.eventIds.size}</td>`
+    ).join('');
 
-    // Conformed / private summary
-    const conformedList = allCats.filter(cat => conformedCats.has(cat));
-    const privateList   = allCats.filter(cat => !conformedCats.has(cat));
-
-    const conformedBadges = conformedList.map(cat => {
-      const catInfo = CATEGORIES[cat] || { label: cat, color: '#4a6cf7' };
-      return `<span style="display:inline-flex;align-items:center;gap:4px;background:${catInfo.color}18;color:${catInfo.color};border:1px solid ${catInfo.color}40;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;margin:3px">
-        ${this._esc(catInfo.label)}
-        <span style="background:${catInfo.color};color:#fff;border-radius:8px;padding:0 5px;font-size:10px">${catEventCount[cat]}</span>
-      </span>`;
-    }).join('');
-
-    const privateBadges = privateList.map(cat => {
-      const catInfo = CATEGORIES[cat] || { label: cat, color: '#9ca3af' };
-      return `<span style="display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;padding:3px 10px;border-radius:12px;font-size:12px;margin:3px">
-        ${this._esc(catInfo.label)}
-      </span>`;
-    }).join('');
+    const conformedDims = dims.filter(d => d.isConformed);
+    const privateDims   = dims.filter(d => !d.isConformed);
+    const tmplDims      = dims.filter(d => d.isTemplate && d.isConformed);
 
     return `
       <div class="info-banner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'">✕</button>
-        <strong>The Kimball Bus Matrix</strong> shows which events (fact tables) use which dimension
-        categories. A <span style="color:#4a6cf7;font-weight:700">✓</span> (blue) means the dimension
-        is <em>conformed</em> — shared by 2+ events, making drill-across queries possible.
-        A <span style="color:#9ca3af;font-weight:700">○</span> (grey) means the dimension is
-        <em>private</em> to that event only.
+        <strong>Kimball Bus Matrix</strong> — Each column is a specific dimension, grouped by 7W category.
+        <span style="color:#4a6cf7;font-weight:700">✓</span> blue = <em>conformed</em> (shared by 2+ events, enables drill-across).
+        <span style="color:#9ca3af;font-weight:700">○</span> grey = <em>private</em> (1 event only).
+        <strong>⊛</strong> = formally conformed via a shared dimension template.
+        Link columns to a <a href="#dimensions" style="color:var(--primary)">dimension template →</a> to register formal conformance.
+      </div>
+
+      <div class="bus-stats-row">
+        <span>${events.length} event${events.length !== 1 ? 's' : ''}</span>
+        <span class="bus-stats-sep">·</span>
+        <span><strong style="color:#4a6cf7">${conformedDims.length}</strong> conformed dim${conformedDims.length !== 1 ? 's' : ''}</span>
+        <span class="bus-stats-sep">·</span>
+        <span>${privateDims.length} private</span>
+        <span class="bus-stats-sep">·</span>
+        <span><strong>${tmplDims.length}</strong> via shared template</span>
       </div>
 
       <div class="bus-matrix-wrapper">
         <table class="bus-matrix">
           <thead>
             <tr>
-              <th class="bus-corner">Event / Dimension</th>
-              ${headerCells}
+              <th class="bus-corner" rowspan="2">Event</th>
+              ${catBandRow}
+            </tr>
+            <tr>
+              ${dimHeaderRow}
             </tr>
           </thead>
-          <tbody>
-            ${rows}
-          </tbody>
+          <tbody>${rows}</tbody>
           <tfoot>
             <tr class="bus-summary-row">
-              <th class="bus-event-header" style="font-size:11px;color:var(--text-muted)">Events using dim</th>
+              <th class="bus-event-header bus-summary-label">Events using</th>
               ${summaryCells}
             </tr>
           </tfoot>
         </table>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px">
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px">
-          <h4 style="margin:0 0 10px;font-size:13px;font-weight:600;color:#4a6cf7">
-            ✓ Conformed Dimensions (${conformedList.length})
-          </h4>
-          ${conformedList.length
-            ? `<div style="display:flex;flex-wrap:wrap">${conformedBadges}</div>`
-            : `<p style="font-size:12px;color:var(--text-muted);margin:0">No conformed dimensions yet — add the same category to 2+ events.</p>`
-          }
-        </div>
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px">
-          <h4 style="margin:0 0 10px;font-size:13px;font-weight:600;color:#6b7280">
-            ○ Private Dimensions (${privateList.length})
-          </h4>
-          ${privateList.length
-            ? `<div style="display:flex;flex-wrap:wrap">${privateBadges}</div>`
-            : `<p style="font-size:12px;color:var(--text-muted);margin:0">No private dimensions.</p>`
-          }
-        </div>
-      </div>
+      ${conformedDims.length === 0 ? `
+      <div class="bus-hint-panel">
+        <strong>No conformed dimensions yet.</strong>
+        Link the same <a href="#dimensions">dimension template</a> to columns in 2+ events,
+        or give the same column name to a dimension across 2+ events — it will appear as conformed.
+      </div>` : ''}
     `;
   },
 
