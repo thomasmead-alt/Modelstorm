@@ -81,6 +81,11 @@ const Storage = {
           if (!col.glAccount)          col.glAccount          = '';
           if (!col.glAccountRangeFrom) col.glAccountRangeFrom = '';
           if (!col.glAccountRangeTo)   col.glAccountRangeTo   = '';
+          // Hierarchy / rollup structure
+          if (col.hierarchyLevel === undefined) col.hierarchyLevel = null;
+          if (!col.hierarchyName)   col.hierarchyName   = '';
+          if (col.isParentKey === undefined) col.isParentKey = false;
+          if (!col.parentColumnId)  col.parentColumnId  = '';
           return col;
         });
         return e;

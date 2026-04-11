@@ -215,12 +215,12 @@ const Matrix = {
         <td class="col-del">
           <button class="btn-icon delete-row" title="Delete row"
             onclick="Matrix.deleteRow('${col.id}')">✕</button>
-          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'Has notes / refs' : 'Add notes'}"
-            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'var(--primary)' : 'inherit'}"
+          <button class="btn-icon" title="${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount || col.hierarchyName || col.hierarchyLevel ? 'Has notes / refs' : 'Add notes'}"
+            style="font-size:11px;opacity:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount || col.hierarchyName || col.hierarchyLevel ? '1' : '0.4'};color:${col.notes || col.formula || col.sapTable || col.publicDimensionId || col.dateKeyRole || col.glAccount || col.hierarchyName || col.hierarchyLevel ? 'var(--primary)' : 'inherit'}"
             onclick="Matrix._toggleNotes('${col.id}')">✎</button>
         </td>
       </tr>
-      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId || col.dateKeyRole || col.glAccount ? 'table-row' : 'none'}">
+      <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId || col.dateKeyRole || col.glAccount || col.hierarchyName || col.hierarchyLevel ? 'table-row' : 'none'}">
         <td colspan="2"></td>
         <td colspan="6" style="padding:4px 8px 8px">
           <div style="display:flex;gap:8px">
@@ -356,6 +356,35 @@ const Matrix = {
               </select>
               ${col.isConformed ? '<span class="conformed-badge">Conformed ✓</span>' : ''}
             </div>
+          </div>
+          <div class="hierarchy-panel">
+            <div class="hierarchy-panel-header">Hierarchy</div>
+            <div class="hierarchy-panel-grid">
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">HIERARCHY NAME</div>
+                <input class="cell-input" style="width:100%;font-size:12px"
+                  value="${this._esc(col.hierarchyName || '')}"
+                  placeholder="e.g. Org hierarchy, Cost centre rollup"
+                  onblur="Matrix.updateField('${col.id}', 'hierarchyName', this.value)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">LEVEL (1 = top)</div>
+                <input class="cell-input" type="number" min="1" max="10"
+                  style="width:80px;font-size:12px"
+                  value="${col.hierarchyLevel !== null && col.hierarchyLevel !== undefined ? col.hierarchyLevel : ''}"
+                  placeholder="e.g. 2"
+                  onblur="Matrix.updateField('${col.id}', 'hierarchyLevel', this.value ? parseInt(this.value) : null)">
+              </div>
+              <div style="padding-top:16px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"
+                  title="Mark this column as a self-referencing parent key (generates recursive FK in DDL)">
+                  <input type="checkbox" ${col.isParentKey ? 'checked' : ''}
+                    onchange="Matrix.updateField('${col.id}', 'isParentKey', this.checked)">
+                  <span>Parent Key (self-ref FK)</span>
+                </label>
+              </div>
+            </div>
+            ${col.isParentKey ? `<div style="font-size:10px;padding:4px 6px;background:#ede9fe;border-radius:4px;color:#5b21b6;margin-top:4px">Self-referencing FK — the DDL generator will add <code>REFERENCES same_table(surrogate_key)</code> for this column.</div>` : ''}
           </div>` : ''}
         </td>
         <td colspan="2"></td>
@@ -664,6 +693,63 @@ const Matrix = {
             ${naCount === 0 && saCount === 0 && bcCount === 0 ? '<span style="color:var(--text-subtle);font-size:11px">All measures fully additive</span>' : ''}
           </div>
         </div>
+      </div>
+      ${event.columns.length > 0 ? this._completenessBar(event.columns) : ''}
+    `;
+  },
+
+  // ── Column completeness score ─────────────────────────────
+
+  _computeCompleteness(columns) {
+    let total = 0, filled = 0;
+    const missing = [];
+    columns.forEach(col => {
+      // Name (always required)
+      total++; if (col.name && col.name.trim()) filled++;
+      // Description
+      total++; if (col.description && col.description.trim()) filled++;
+      // Format/examples — skip surrogate/natural keys and booleans
+      if (!col.isSurrogateKey && !col.isNaturalKey && col.dataType !== 'BOOLEAN') {
+        total++; if (col.format && col.format.trim()) filled++;
+      }
+      // When columns: date key role
+      if (col.category === 'when') {
+        total++; if (col.dateKeyRole) filled++;
+      }
+      // How-many columns: formula if derived
+      if (col.category === 'how_many' && col.source === 'derived') {
+        total++; if (col.formula && col.formula.trim()) filled++;
+      }
+    });
+    const pct = total ? Math.round(filled / total * 100) : 0;
+    // Identify incomplete columns for tooltip
+    columns.forEach(col => {
+      const issues = [];
+      if (!col.description?.trim()) issues.push('missing description');
+      if (!col.isSurrogateKey && !col.isNaturalKey && col.dataType !== 'BOOLEAN' && !col.format?.trim()) issues.push('missing format/examples');
+      if (col.category === 'when' && !col.dateKeyRole) issues.push('no date key role');
+      if (col.category === 'how_many' && col.source === 'derived' && !col.formula?.trim()) issues.push('no formula');
+      if (issues.length) missing.push(`${col.name || '(unnamed)'}: ${issues.join(', ')}`);
+    });
+    return { pct, filled, total, missing };
+  },
+
+  _completenessBar(columns) {
+    const { pct, filled, total, missing } = this._computeCompleteness(columns);
+    const color = pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
+    const label = pct >= 90 ? 'Well documented' : pct >= 70 ? 'Partially documented' : 'Needs documentation';
+    const tooltip = missing.length
+      ? 'Incomplete columns:\n' + missing.slice(0, 8).join('\n') + (missing.length > 8 ? `\n…and ${missing.length - 8} more` : '')
+      : 'All columns fully documented';
+    return `
+      <div class="completeness-section" title="${this._esc(tooltip)}">
+        <span class="completeness-label">Column completeness</span>
+        <div class="completeness-bar-outer">
+          <div class="completeness-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="completeness-pct" style="color:${color}">${pct}%</span>
+        <span style="font-size:11px;color:var(--text-subtle)">${this._esc(label)} · ${filled}/${total} fields filled</span>
+        ${missing.length ? `<span style="font-size:11px;color:${color};cursor:default" title="${this._esc(tooltip)}">⚠ ${missing.length} issue${missing.length !== 1 ? 's' : ''}</span>` : ''}
       </div>
     `;
   },

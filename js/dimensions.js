@@ -155,12 +155,17 @@ const DimensionLibrary = {
               <th>Column Name</th>
               <th>Data Type</th>
               <th>Responsibility</th>
+              <th>Hierarchy</th>
               <th>Description</th>
             </tr>
           </thead>
           <tbody>
             ${dim.columns.map(c => {
               const rt = RESPONSIBILITY_TYPES[c.responsibilityType] || {};
+              const hlevel = c.hierarchyLevel !== null && c.hierarchyLevel !== undefined ? c.hierarchyLevel : null;
+              const hierCell = hlevel !== null
+                ? `<span style="font-size:11px;font-weight:600;color:#7c3aed">L${hlevel}</span>${c.isParentKey ? ' <span title="Self-ref parent key" style="font-size:10px;color:#7c3aed">⇡ Parent</span>' : ''}`
+                : (c.isParentKey ? '<span title="Self-ref parent key" style="font-size:10px;color:#7c3aed">⇡ Parent</span>' : '<span style="color:var(--text-subtle)">—</span>');
               return `
                 <tr>
                   <td>
@@ -169,6 +174,7 @@ const DimensionLibrary = {
                   </td>
                   <td><code>${this._esc(c.dataType)}</code></td>
                   <td>${c.responsibilityType !== 'none' ? `<span style="color:${rt.color || '#9ca3af'};font-size:12px;font-weight:600">${rt.label || c.responsibilityType}</span>` : '<span style="color:var(--text-subtle)">—</span>'}</td>
+                  <td>${hierCell}</td>
                   <td style="color:var(--text-muted)">${this._esc(c.description || '')}</td>
                 </tr>`;
             }).join('')}
@@ -266,6 +272,8 @@ const DimensionLibrary = {
                 <th style="width:52px;text-align:center">Key</th>
                 <th style="width:160px">Responsibility</th>
                 <th>Description</th>
+                <th style="width:80px;text-align:center" title="Hierarchy level (1 = top). Used for rollup/drill-down paths.">H.Level</th>
+                <th style="width:56px;text-align:center" title="Mark as self-referencing parent key (generates recursive FK in DDL)">Parent</th>
                 <th style="width:32px"></th>
               </tr>
             </thead>
@@ -311,6 +319,18 @@ const DimensionLibrary = {
               onchange="DimensionLibrary._updateEditorCol('${col.id}','responsibilityType',this.value)">${rtOpts}</select></td>
         <td><input class="cell-input" value="${this._esc(col.description || '')}" placeholder="What this column represents…"
               onblur="DimensionLibrary._updateEditorCol('${col.id}','description',this.value)"></td>
+        <td style="text-align:center">
+          <input type="number" class="cell-input" min="1" max="10" style="width:56px;font-size:12px;text-align:center"
+            value="${col.hierarchyLevel !== null && col.hierarchyLevel !== undefined ? col.hierarchyLevel : ''}"
+            placeholder="—"
+            title="Hierarchy level: 1 = top/root, 2 = next level down, etc."
+            onblur="DimensionLibrary._updateEditorCol('${col.id}','hierarchyLevel',this.value ? parseInt(this.value) : null)">
+        </td>
+        <td style="text-align:center">
+          <input type="checkbox" ${col.isParentKey ? 'checked' : ''}
+            onchange="DimensionLibrary._updateEditorCol('${col.id}','isParentKey',this.checked)"
+            title="Self-referencing parent key — points to the parent row in the same dimension table">
+        </td>
         <td><button class="btn-icon delete-row" title="Remove column"
               onclick="DimensionLibrary._deleteEditorCol('${col.id}')">✕</button></td>
       </tr>`;
@@ -324,7 +344,11 @@ const DimensionLibrary = {
       dataType: 'VARCHAR',
       isKey: false,
       responsibilityType: 'none',
-      description: ''
+      description: '',
+      hierarchyLevel: null,
+      hierarchyName: '',
+      isParentKey: false,
+      parentColumnId: ''
     };
     this._editorState.dim.columns.push(col);
     const tbody = document.getElementById('dimEditorBody');

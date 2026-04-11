@@ -104,6 +104,10 @@ const Architecture = {
     if (tab === 'diagram') {
       this._initDiagramPanZoom();
     }
+    // Initialise bus matrix column highlight after DOM is ready
+    if (tab === 'matrix') {
+      requestAnimationFrame(() => this._initBusInteraction());
+    }
   },
 
   // ─── Bus Matrix ───────────────────────────────────────────────────────────
@@ -197,11 +201,11 @@ const Architecture = {
       </th>`;
     }).join('');
 
-    const dimHeaderRow = dims.map(d => {
+    const dimHeaderRow = dims.map((d, i) => {
       const borderColor = d.isConformed ? '#4a6cf7' : '#e5e7eb';
       const tooltip = (d.isConformed ? `Conformed — shared by ${d.eventIds.size} events` : 'Private — 1 event')
         + '\nColumns: ' + [...d.colNames].join(', ');
-      return `<th class="bus-dim-header" title="${this._esc(tooltip)}"
+      return `<th class="bus-dim-header" data-dim-idx="${i}" title="${this._esc(tooltip)}"
         style="border-top:3px solid ${borderColor}">
         <div class="bus-dim-name">${this._esc(d.label)}</div>
         ${d.isConformed && d.isTemplate
@@ -221,11 +225,11 @@ const Architecture = {
       const anchorCount   = (event.columns || []).filter(c => c.isFinancialAnchor).length;
       const glMappings    = (event.glMappings || []).length;
 
-      const cells = dims.map(d => {
-        if (!d.eventIds.has(event.id)) return `<td class="bus-cell-td bus-cell-empty"></td>`;
+      const cells = dims.map((d, idx) => {
+        if (!d.eventIds.has(event.id)) return `<td class="bus-cell-td bus-cell-empty" data-dim-idx="${idx}"></td>`;
         return d.isConformed
-          ? `<td class="bus-cell-td"><span class="bus-cell bus-conformed" title="Conformed — shared by ${d.eventIds.size} events">✓</span></td>`
-          : `<td class="bus-cell-td"><span class="bus-cell bus-private" title="Private to this event">○</span></td>`;
+          ? `<td class="bus-cell-td" data-dim-idx="${idx}"><span class="bus-cell bus-conformed" title="Conformed — shared by ${d.eventIds.size} events">✓</span></td>`
+          : `<td class="bus-cell-td" data-dim-idx="${idx}"><span class="bus-cell bus-private" title="Private to this event">○</span></td>`;
       }).join('');
 
       return `<tr>
@@ -246,8 +250,8 @@ const Architecture = {
     }).join('');
 
     // ── Summary footer ──────────────────────────────────────────────────────
-    const summaryCells = dims.map(d =>
-      `<td class="bus-cell-td" style="text-align:center;font-size:12px;font-weight:700;color:${d.isConformed ? '#4a6cf7' : '#9ca3af'}">${d.eventIds.size}</td>`
+    const summaryCells = dims.map((d, idx) =>
+      `<td class="bus-cell-td" data-dim-idx="${idx}" style="text-align:center;font-size:12px;font-weight:700;color:${d.isConformed ? '#4a6cf7' : '#9ca3af'}">${d.eventIds.size}</td>`
     ).join('');
 
     const conformedDims = dims.filter(d => d.isConformed);
@@ -272,6 +276,10 @@ const Architecture = {
         <span>${privateDims.length} private</span>
         <span class="bus-stats-sep">·</span>
         <span><strong>${tmplDims.length}</strong> via shared template</span>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="Architecture._exportBusMatrixCSV('${project.id}')">⬇ CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="Architecture._printBusMatrix('${project.id}')">🖨 Print</button>
+        </span>
       </div>
 
       <div class="bus-matrix-wrapper">
@@ -316,240 +324,211 @@ const Architecture = {
       </div>`;
     }
 
+    // Reuse the same dimMap logic as the bus matrix — specific dimensions, not categories
+    const dimTemplates = (typeof Storage !== 'undefined' && Storage.getAllDimTemplates)
+      ? Storage.getAllDimTemplates() : [];
     const catOrder = Object.keys(CATEGORIES).filter(k => k !== 'how_many');
 
-    // All dim categories per event
-    const eventCatMap = events.map(e => ({
-      event: e,
-      cats: [...new Set((e.columns || []).filter(c => c.category !== 'how_many').map(c => c.category))]
-    }));
-
-    // All dim categories across all events
-    const allCats = catOrder.filter(cat =>
-      events.some(e => (e.columns || []).some(c => c.category === cat))
-    );
-
-    // Conformed = used in >=2 events
-    const catEventCount = {};
-    allCats.forEach(cat => {
-      catEventCount[cat] = events.filter(e =>
-        (e.columns || []).some(c => c.category === cat)
-      ).length;
-    });
-    const conformedCats = allCats.filter(cat => catEventCount[cat] >= 2);
-    const privateCats   = allCats.filter(cat => catEventCount[cat] < 2);
-
-    // ── Layout ──
-    const W = 960, H = 600;
-
-    // Fact nodes: spread horizontally at y=80
-    const factY = 80;
-    const factW = 180, factH = 60;
-    const factSpacing = Math.max(factW + 40, W / Math.max(events.length, 1));
-    const factStartX = (W - (events.length - 1) * factSpacing) / 2;
-
-    const factNodes = events.map((event, i) => {
-      const grainKey = event.grain || 'transaction';
-      const grainInfo = GRAINS[grainKey] || { label: grainKey, short: grainKey.toUpperCase(), color: '#6b7280' };
-      return {
-        id: event.id,
-        label: event.name,
-        grainShort: grainInfo.short,
-        grainColor: grainInfo.color,
-        x: factStartX + i * factSpacing,
-        y: factY,
-        w: factW,
-        h: factH,
-        type: 'fact'
-      };
-    });
-
-    // Conformed dim nodes: spread horizontally at y=300
-    const conformedY = 300;
-    const conformedW = 140, conformedH = 50;
-    const confSpacing = Math.max(conformedW + 30, W / Math.max(conformedCats.length, 1));
-    const confStartX = conformedCats.length > 0
-      ? (W - (conformedCats.length - 1) * confSpacing) / 2
-      : W / 2;
-
-    const conformedNodes = conformedCats.map((cat, i) => {
-      const catInfo = CATEGORIES[cat] || { label: cat, color: '#4a6cf7' };
-      return {
-        id: `conf_${cat}`,
-        cat,
-        label: catInfo.label,
-        color: catInfo.color,
-        x: confStartX + i * confSpacing,
-        y: conformedY,
-        w: conformedW,
-        h: conformedH,
-        type: 'conformed'
-      };
-    });
-
-    // Private dim nodes: place near the fact table that uses them
-    const privateY = 480;
-    const privateW = 120, privateH = 40;
-
-    // Build a map: factIdx → list of private cats for that fact
-    const factPrivateCats = factNodes.map(fn => {
-      const event = events.find(e => e.id === fn.id);
-      const ec = eventCatMap.find(m => m.event.id === fn.id);
-      return (ec ? ec.cats : []).filter(c => privateCats.includes(c));
-    });
-
-    const privateNodes = [];
-    factPrivateCats.forEach((cats, fi) => {
-      const factX = factNodes[fi].x;
-      const total = cats.length;
-      cats.forEach((cat, ci) => {
-        const catInfo = CATEGORIES[cat] || { label: cat, color: '#9ca3af' };
-        const offset = (ci - (total - 1) / 2) * (privateW + 16);
-        privateNodes.push({
-          id: `priv_${fi}_${cat}`,
-          cat,
-          label: catInfo.label,
-          color: catInfo.color,
-          factId: factNodes[fi].id,
-          x: factX + offset,
-          y: privateY,
-          w: privateW,
-          h: privateH,
-          type: 'private'
-        });
+    const dimMap = new Map();
+    events.forEach(event => {
+      (event.columns || []).forEach(col => {
+        if (col.category === 'how_many' || !col.category) return;
+        let key, label, isTemplate = false;
+        if (col.publicDimensionId) {
+          key = `tmpl:${col.publicDimensionId}`;
+          const tmpl = dimTemplates.find(d => d.id === col.publicDimensionId);
+          label = tmpl ? tmpl.name : (col.name || col.publicDimensionId);
+          isTemplate = true;
+        } else {
+          const norm = (col.name || col.category).toLowerCase().trim().replace(/\s+/g, '_');
+          key = `raw:${col.category}:${norm}`;
+          label = col.name || (CATEGORIES[col.category]?.label || col.category);
+        }
+        if (!dimMap.has(key)) {
+          dimMap.set(key, { key, label, isTemplate, category: col.category,
+            catInfo: CATEGORIES[col.category] || { label: col.category, color: '#6b7280' },
+            eventIds: new Set() });
+        }
+        dimMap.get(key).eventIds.add(event.id);
       });
     });
 
-    // ── SVG elements ──
-    const svgParts = [];
+    const allDims = [...dimMap.values()].sort((a, b) => {
+      const ai = catOrder.indexOf(a.category), bi = catOrder.indexOf(b.category);
+      return ai !== bi ? ai - bi : a.label.localeCompare(b.label);
+    });
+    allDims.forEach(d => { d.isConformed = d.eventIds.size >= 2; });
 
-    // Defs: arrowhead
-    svgParts.push(`<defs>
-      <marker id="arrowhead-conf" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#4a6cf7" opacity="0.7"/>
+    const conformedDims = allDims.filter(d => d.isConformed);
+    const privateDims   = allDims.filter(d => !d.isConformed);
+
+    // ── Layout ──────────────────────────────────────────────────────────────
+    const NODE_W = 150, FACT_H = 60, DIM_H = 46;
+    const HGAP = 20, FACT_Y = 70, CONF_Y = 250, PRIV_Y = 420;
+
+    const totalFactW = events.length * (NODE_W + HGAP) - HGAP;
+    const totalConfW = conformedDims.length * (NODE_W + HGAP) - HGAP;
+    const totalPrivW = privateDims.length  * (NODE_W + HGAP) - HGAP;
+    const W = Math.max(960, Math.max(totalFactW, totalConfW, totalPrivW) + 80);
+    const H = privateDims.length ? 530 : 380;
+
+    const cx = W / 2;
+    const factStartX  = cx - totalFactW / 2 + NODE_W / 2;
+    const confStartX  = conformedDims.length ? cx - totalConfW / 2 + NODE_W / 2 : cx;
+    const privStartX  = privateDims.length  ? cx - totalPrivW  / 2 + NODE_W / 2 : cx;
+
+    const factNodes = events.map((event, i) => {
+      const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[event.grain || 'transaction'])
+        || { short: 'TXN', color: '#6b7280', bg: '#f9fafb' };
+      const purpose = event.eventPurpose || 'actuals';
+      const purposeInfo = (typeof EVENT_PURPOSES !== 'undefined' && EVENT_PURPOSES[purpose]) || null;
+      return { id: event.id, label: event.name, grainShort: grainInfo.short, grainColor: grainInfo.color,
+        purposeColor: purposeInfo && purpose !== 'actuals' ? purposeInfo.color : null,
+        x: factStartX + i * (NODE_W + HGAP), y: FACT_Y, w: NODE_W, h: FACT_H };
+    });
+
+    const conformedNodes = conformedDims.map((d, i) => ({
+      ...d, x: confStartX + i * (NODE_W + HGAP), y: CONF_Y, w: NODE_W, h: DIM_H
+    }));
+
+    // Private dims: cluster near their owning fact
+    const privateNodes = privateDims.map(d => {
+      // Place near the single event that uses it
+      const eventId = [...d.eventIds][0];
+      const fn = factNodes.find(f => f.id === eventId);
+      return { ...d, ownerFactId: eventId, anchorX: fn ? fn.x : cx };
+    });
+    // Sort by anchorX then spread horizontally at PRIV_Y
+    privateNodes.sort((a, b) => a.anchorX - b.anchorX);
+    privateNodes.forEach((pn, i) => {
+      pn.x = privStartX + i * (NODE_W + HGAP);
+      pn.y = PRIV_Y;
+      pn.w = NODE_W;
+      pn.h = DIM_H;
+    });
+
+    // ── SVG ─────────────────────────────────────────────────────────────────
+    const parts = [];
+
+    parts.push(`<defs>
+      <marker id="ah-conf" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+        <polygon points="0 0,7 2.5,0 5" fill="#4a6cf7" opacity="0.8"/>
       </marker>
-      <marker id="arrowhead-priv" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#9ca3af" opacity="0.7"/>
+      <marker id="ah-priv" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+        <polygon points="0 0,7 2.5,0 5" fill="#9ca3af" opacity="0.7"/>
       </marker>
     </defs>`);
 
-    // Edges: fact → conformed dims
+    // Row labels
+    parts.push(`<text x="14" y="${FACT_Y - 10}" font-size="10" fill="#9ca3af" font-style="italic" font-family="sans-serif">Fact Tables</text>`);
+    if (conformedNodes.length)
+      parts.push(`<text x="14" y="${CONF_Y - 10}" font-size="10" fill="#9ca3af" font-style="italic" font-family="sans-serif">Conformed Dimensions</text>`);
+    if (privateNodes.length)
+      parts.push(`<text x="14" y="${PRIV_Y - 10}" font-size="10" fill="#9ca3af" font-style="italic" font-family="sans-serif">Private Dimensions</text>`);
+
+    // Edges: fact → conformed (solid, coloured by dim category)
     conformedNodes.forEach(cn => {
       factNodes.forEach(fn => {
-        const ec = eventCatMap.find(m => m.event.id === fn.id);
-        if (ec && ec.cats.includes(cn.cat)) {
-          const x1 = fn.x, y1 = fn.y + fn.h;
-          const x2 = cn.x, y2 = cn.y;
-          const midY = (y1 + y2) / 2;
-          svgParts.push(`<path d="M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}"
-            fill="none" stroke="#4a6cf7" stroke-width="2"
-            marker-end="url(#arrowhead-conf)"/>`);
-        }
+        if (!cn.eventIds.has(fn.id)) return;
+        const y1 = fn.y + fn.h, y2 = cn.y, mid = (y1 + y2) / 2;
+        parts.push(`<path d="M${fn.x},${y1} C${fn.x},${mid} ${cn.x},${mid} ${cn.x},${y2}"
+          fill="none" stroke="${cn.catInfo.color}" stroke-width="1.8" opacity="0.6"
+          marker-end="url(#ah-conf)"/>`);
       });
     });
 
-    // Edges: fact → private dims
+    // Edges: fact → private (dashed grey)
     privateNodes.forEach(pn => {
-      const fn = factNodes.find(f => f.id === pn.factId);
+      const fn = factNodes.find(f => f.id === pn.ownerFactId);
       if (!fn) return;
-      const x1 = fn.x, y1 = fn.y + fn.h;
-      const x2 = pn.x, y2 = pn.y;
-      const midY = (y1 + y2) / 2;
-      svgParts.push(`<path d="M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}"
-        fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5,3"
-        marker-end="url(#arrowhead-priv)"/>`);
+      const y1 = fn.y + fn.h, y2 = pn.y, mid = (y1 + y2) / 2;
+      parts.push(`<path d="M${fn.x},${y1} C${fn.x},${mid} ${pn.x},${mid} ${pn.x},${y2}"
+        fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,3"
+        marker-end="url(#ah-priv)"/>`);
     });
 
     // Fact nodes
     factNodes.forEach(fn => {
-      const rx = fn.x - fn.w / 2, ry = fn.y - fn.h / 2;
-      svgParts.push(`<g class="arch-fact-node">
+      const rx = fn.x - fn.w / 2, ry = fn.y;
+      const lbl = fn.label.length > 20 ? fn.label.slice(0, 18) + '…' : fn.label;
+      parts.push(`<g class="arch-fact-node" style="cursor:pointer" onclick="Router.navigate('event/${fn.id}')">
         <rect x="${rx}" y="${ry}" width="${fn.w}" height="${fn.h}" rx="6"
           fill="#fff7ed" stroke="#e85d04" stroke-width="2"/>
-        <text x="${fn.x}" y="${ry + 22}" text-anchor="middle"
-          font-size="12" font-weight="700" fill="#9a3412">${this._esc(fn.label.slice(0, 22) + (fn.label.length > 22 ? '…' : ''))}</text>
-        <text x="${fn.x}" y="${ry + 42}" text-anchor="middle"
-          font-size="10" fill="${fn.grainColor}" font-weight="600">${this._esc(fn.grainShort)}</text>
+        <text x="${fn.x}" y="${ry + 20}" text-anchor="middle"
+          font-size="11" font-weight="700" fill="#9a3412" font-family="sans-serif">${this._esc(lbl)}</text>
+        <text x="${fn.x}" y="${ry + 36}" text-anchor="middle"
+          font-size="10" fill="${fn.grainColor}" font-weight="600" font-family="sans-serif">${this._esc(fn.grainShort)}</text>
+        ${fn.purposeColor ? `<text x="${fn.x}" y="${ry + 52}" text-anchor="middle"
+          font-size="9" fill="${fn.purposeColor}" font-family="sans-serif">plan</text>` : ''}
       </g>`);
     });
 
-    // Conformed dim nodes
+    // Conformed dim nodes — coloured by category, ⊛ if template-linked
     conformedNodes.forEach(cn => {
-      const rx = cn.x - cn.w / 2, ry = cn.y - cn.h / 2;
-      svgParts.push(`<g class="arch-conformed-node">
+      const rx = cn.x - cn.w / 2, ry = cn.y;
+      const usageCount = cn.eventIds.size;
+      const lbl = cn.label.length > 19 ? cn.label.slice(0, 17) + '…' : cn.label;
+      parts.push(`<g class="arch-conformed-node">
         <rect x="${rx}" y="${ry}" width="${cn.w}" height="${cn.h}" rx="8"
-          fill="${cn.color}18" stroke="${cn.color}" stroke-width="2"/>
-        <text x="${cn.x}" y="${cn.y + 5}" text-anchor="middle"
-          font-size="11" font-weight="700" fill="${cn.color}">${this._esc(cn.label)}</text>
+          fill="${cn.catInfo.color}15" stroke="${cn.catInfo.color}" stroke-width="2"/>
+        <text x="${cn.x - (cn.isTemplate ? 8 : 0)}" y="${ry + 18}" text-anchor="middle"
+          font-size="11" font-weight="700" fill="${cn.catInfo.color}" font-family="sans-serif">${this._esc(lbl)}</text>
+        <text x="${cn.x}" y="${ry + 34}" text-anchor="middle"
+          font-size="9" fill="${cn.catInfo.color}99" font-family="sans-serif">${usageCount} events</text>
+        ${cn.isTemplate ? `<text x="${rx + cn.w - 8}" y="${ry + 18}" text-anchor="middle"
+          font-size="11" fill="${cn.catInfo.color}" font-weight="700" font-family="sans-serif">⊛</text>` : ''}
       </g>`);
     });
 
-    // Private dim nodes
+    // Private dim nodes — grey, labelled with dim name
     privateNodes.forEach(pn => {
-      const rx = pn.x - pn.w / 2, ry = pn.y - pn.h / 2;
-      svgParts.push(`<g class="arch-private-node">
-        <rect x="${rx}" y="${ry}" width="${pn.w}" height="${pn.h}" rx="5"
-          fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
-        <text x="${pn.x}" y="${pn.y + 4}" text-anchor="middle"
-          font-size="10" fill="#6b7280">${this._esc(pn.label)}</text>
+      const rx = pn.x - pn.w / 2, ry = pn.y;
+      const lbl = pn.label.length > 19 ? pn.label.slice(0, 17) + '…' : pn.label;
+      parts.push(`<g class="arch-private-node">
+        <rect x="${rx}" y="${ry}" width="${pn.w}" height="${pn.h}" rx="6"
+          fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="${pn.x}" y="${ry + 17}" text-anchor="middle"
+          font-size="10" font-weight="600" fill="#64748b" font-family="sans-serif">${this._esc(lbl)}</text>
+        <text x="${pn.x}" y="${ry + 32}" text-anchor="middle"
+          font-size="9" fill="#94a3b8" font-family="sans-serif">${this._esc(pn.catInfo.label)}</text>
       </g>`);
     });
-
-    // Row labels
-    if (factNodes.length) {
-      svgParts.push(`<text x="8" y="${factY + 5}" font-size="10" fill="#9ca3af" font-style="italic">Fact Tables</text>`);
-    }
-    if (conformedNodes.length) {
-      svgParts.push(`<text x="8" y="${conformedY + 5}" font-size="10" fill="#9ca3af" font-style="italic">Conformed Dims</text>`);
-    }
-    if (privateNodes.length) {
-      svgParts.push(`<text x="8" y="${privateY + 5}" font-size="10" fill="#9ca3af" font-style="italic">Private Dims</text>`);
-    }
 
     return `
       <div class="info-banner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'">✕</button>
-        <strong>Architecture Diagram</strong> — This diagram shows all fact tables (events) connected
-        through their shared and private dimensions.
-        <strong>Solid lines</strong> connect to conformed (shared) dimensions.
-        <strong>Dashed lines</strong> connect to private dimensions.
+        <strong>Architecture Diagram</strong> — Each node is a specific dimension (same resolution as the Bus Matrix).
+        Edge colour matches the dimension's 7W category. <strong>Solid</strong> = conformed (≥2 facts).
+        <strong>Dashed</strong> = private. <strong>⊛</strong> = linked to a shared template.
+        Click a fact node to open its matrix.
       </div>
 
       <div class="diagram-toolbar">
         <button class="btn btn-ghost btn-sm" id="archZoomIn">+ Zoom In</button>
         <button class="btn btn-ghost btn-sm" id="archZoomOut">− Zoom Out</button>
         <button class="btn btn-ghost btn-sm" id="archZoomReset">Reset</button>
-        <span class="diagram-hint">Drag to pan &nbsp;·&nbsp; Scroll to zoom</span>
+        <button class="btn btn-ghost btn-sm" onclick="Architecture._downloadSVG()">⬇ SVG</button>
+        <span class="diagram-hint">Drag to pan · Scroll to zoom · Click fact to open</span>
       </div>
 
       <div class="diagram-container" id="archDiagramContainer" style="cursor:grab">
         <svg id="archDiagramSvg" viewBox="0 0 ${W} ${H}"
           xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
-          ${svgParts.join('\n          ')}
+          ${parts.join('\n          ')}
         </svg>
       </div>
 
       <div class="diagram-legend" style="margin-top:12px">
         <div class="legend-item">
-          <span style="display:inline-block;width:16px;height:16px;background:#fff7ed;border:2px solid #e85d04;border-radius:3px;vertical-align:middle;margin-right:4px"></span>
-          Fact Table (event)
+          <span style="display:inline-block;width:16px;height:16px;background:#fff7ed;border:2px solid #e85d04;border-radius:3px;vertical-align:middle;margin-right:4px"></span>Fact Table
         </div>
         <div class="legend-item">
-          <span style="display:inline-block;width:16px;height:16px;background:#4a6cf718;border:2px solid #4a6cf7;border-radius:4px;vertical-align:middle;margin-right:4px"></span>
-          Conformed Dimension (shared ≥ 2 facts)
+          <span style="display:inline-block;width:16px;height:16px;background:#4a6cf715;border:2px solid #4a6cf7;border-radius:4px;vertical-align:middle;margin-right:4px"></span>Conformed Dimension
         </div>
         <div class="legend-item">
-          <span style="display:inline-block;width:16px;height:16px;background:#f9fafb;border:1.5px solid #d1d5db;border-radius:3px;vertical-align:middle;margin-right:4px"></span>
-          Private Dimension (1 fact only)
+          <span style="display:inline-block;width:16px;height:16px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:3px;vertical-align:middle;margin-right:4px"></span>Private Dimension
         </div>
-        <div class="legend-item">
-          <span style="display:inline-block;width:28px;height:2px;background:#4a6cf7;vertical-align:middle;margin-right:4px"></span>
-          Shared / conformed relationship
-        </div>
-        <div class="legend-item">
-          <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #9ca3af;vertical-align:middle;margin-right:4px"></span>
-          Private relationship
-        </div>
+        <div class="legend-item"><strong>⊛</strong> &nbsp;Linked to shared template</div>
       </div>
     `;
   },
@@ -601,6 +580,132 @@ const Architecture = {
     if (zoomIn)    zoomIn.onclick    = () => { scale = Math.min(3, scale + 0.15); apply(); };
     if (zoomOut)   zoomOut.onclick   = () => { scale = Math.max(0.3, scale - 0.15); apply(); };
     if (zoomReset) zoomReset.onclick = () => { scale = 1; panX = 0; panY = 0; apply(); };
+  },
+
+  // ─── Bus matrix column highlight on click ────────────────────────────────
+
+  _initBusInteraction() {
+    const headers = document.querySelectorAll('.bus-dim-header[data-dim-idx]');
+    headers.forEach(th => {
+      th.style.cursor = 'pointer';
+      th.setAttribute('title', (th.getAttribute('title') || '') + '\nClick to highlight column');
+      th.addEventListener('click', () => {
+        const idx = th.dataset.dimIdx;
+        const isActive = th.classList.contains('bus-col-active');
+        // Clear all existing highlights
+        document.querySelectorAll('.bus-col-active').forEach(el => el.classList.remove('bus-col-active'));
+        if (!isActive) {
+          th.classList.add('bus-col-active');
+          document.querySelectorAll(`.bus-cell-td[data-dim-idx="${idx}"]`).forEach(td => td.classList.add('bus-col-active'));
+        }
+      });
+    });
+  },
+
+  // ─── SVG download for architecture diagram ────────────────────────────────
+
+  _downloadSVG() {
+    const svg = document.getElementById('archDiagramSvg');
+    if (!svg) return;
+    const ser = new XMLSerializer();
+    let src = ser.serializeToString(svg);
+    if (!src.includes('xmlns="http://www.w3.org/2000/svg"'))
+      src = src.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    src = '<?xml version="1.0" encoding="UTF-8"?>\n' + src;
+    const blob = new Blob([src], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'architecture-diagram.svg'; a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  // ─── Print bus matrix ─────────────────────────────────────────────────────
+
+  _printBusMatrix(projectId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const table = document.querySelector('.bus-matrix');
+    if (!table) return;
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bus Matrix — ${this._esc(project.name)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1.5rem; color: #111; }
+    h1 { font-size: 1.2rem; margin-bottom: 0.5rem; }
+    .meta { color: #666; font-size: 0.8rem; margin-bottom: 1rem; }
+    table { border-collapse: collapse; font-size: 11px; }
+    th, td { border: 1px solid #d1d5db; padding: 5px 8px; text-align: center; }
+    thead th { background: #1c1c28; color: #fff; }
+    th:first-child, td:first-child { text-align: left; min-width: 160px; }
+    tbody tr:nth-child(even) td { background: #f9fafb; }
+    tfoot td, tfoot th { background: #f3f4f6; font-weight: 700; }
+    @media print { button { display: none; } }
+  </style>
+</head>
+<body>
+  <h1>Kimball Bus Matrix: ${this._esc(project.name)}</h1>
+  <div class="meta">Generated ${new Date().toLocaleString()}</div>
+  ${table.outerHTML}
+  <p style="margin-top:1.5rem"><button onclick="window.print()">Print / Save as PDF</button></p>
+</body>
+</html>`);
+    win.document.close();
+  },
+
+  // ─── CSV export of bus matrix ─────────────────────────────────────────────
+
+  _exportBusMatrixCSV(projectId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const events = project.events || [];
+    const dimTemplates = (typeof Storage !== 'undefined' && Storage.getAllDimTemplates)
+      ? Storage.getAllDimTemplates() : [];
+    const catOrder = Object.keys(CATEGORIES).filter(k => k !== 'how_many');
+    const dimMap = new Map();
+    events.forEach(event => {
+      (event.columns || []).forEach(col => {
+        if (col.category === 'how_many' || !col.category) return;
+        let key, label;
+        if (col.publicDimensionId) {
+          key = `tmpl:${col.publicDimensionId}`;
+          const tmpl = dimTemplates.find(d => d.id === col.publicDimensionId);
+          label = tmpl ? tmpl.name : (col.name || col.publicDimensionId);
+        } else {
+          const norm = (col.name || col.category).toLowerCase().trim().replace(/\s+/g, '_');
+          key = `raw:${col.category}:${norm}`;
+          label = col.name || (CATEGORIES[col.category]?.label || col.category);
+        }
+        if (!dimMap.has(key)) {
+          dimMap.set(key, { key, label, category: col.category, eventIds: new Set() });
+        }
+        dimMap.get(key).eventIds.add(event.id);
+      });
+    });
+    const dims = [...dimMap.values()].sort((a, b) => {
+      const ai = catOrder.indexOf(a.category), bi = catOrder.indexOf(b.category);
+      return ai !== bi ? ai - bi : a.label.localeCompare(b.label);
+    });
+    dims.forEach(d => { d.isConformed = d.eventIds.size >= 2; });
+
+    const q = s => `"${String(s).replace(/"/g, '""')}"`;
+    const header = ['Event', 'Grain', 'Purpose', ...dims.map(d => d.label)];
+    const rows = events.map(event => {
+      const grain = (typeof GRAINS !== 'undefined' && GRAINS[event.grain || 'transaction'])?.label || event.grain || '';
+      const purpose = (typeof EVENT_PURPOSES !== 'undefined' && EVENT_PURPOSES[event.eventPurpose || 'actuals'])?.label || event.eventPurpose || 'Actuals';
+      const cells = dims.map(d => d.eventIds.has(event.id) ? (d.isConformed ? 'Conformed' : 'Private') : '');
+      return [event.name, grain, purpose, ...cells];
+    });
+
+    const csv = [header, ...rows].map(row => row.map(q).join(',')).join('\n');
+    const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${slug}-bus-matrix.csv`; a.click();
+    URL.revokeObjectURL(url);
   },
 
   // ─── HTML escape helper ───────────────────────────────────────────────────
