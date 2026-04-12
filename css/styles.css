@@ -2178,6 +2178,15 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 .conformed-key-badge { display:inline-block; background:#fef3c7; color:#92400e; border:1px solid #fde68a; border-radius:4px; padding:1px 8px; font-size:11px; font-weight:700; }
 .conformed-description { background:#f9fafb; border:1px solid var(--border); border-radius:6px; padding:12px; }
 .conformed-readonly-footer { padding:14px 24px; border-top:1px solid var(--border); font-size:11px; color:var(--text-muted); background:#f9fafb; line-height:1.6; flex-shrink:0; }
+.conformed-dim-attr-list { border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.conformed-dim-attr-row { display:flex; align-items:baseline; gap:8px; padding:5px 12px; border-bottom:1px solid #f3f4f6; font-size:12px; }
+.conformed-dim-attr-row:last-child { border-bottom:none; }
+.conformed-dim-attr-row-key { background:#f0f9ff; }
+.conformed-dim-attr-key { width:16px; flex-shrink:0; font-size:11px; }
+.conformed-dim-attr-name { font-weight:500; color:var(--text); min-width:120px; }
+.conformed-dim-attr-type { font-size:11px; color:#6b7280; min-width:60px; }
+.conformed-dim-attr-cat { font-size:10px; font-weight:600; min-width:50px; }
+.conformed-dim-attr-desc { font-size:11px; color:#9ca3af; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
 
 /* ── Editable event meta selects (grain / purpose) ── */
 .event-meta-select {

@@ -416,62 +416,75 @@ const Projects = {
     const pId = project.id; const eId = event.id; const cId = col.id;
     const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
     const dim = allDims.find(d => d.id === col.publicDimensionId);
-    const dimCol = dim && col.publicDimensionColId
-      ? (dim.columns || []).find(c => c.id === col.publicDimensionColId)
-      : null;
-
     const catInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { label: col.category, color: '#6b7280' };
-    const respInfo = (typeof RESPONSIBILITY_TYPES !== 'undefined' && col.responsibilityType)
-      ? (RESPONSIBILITY_TYPES[col.responsibilityType] || null) : null;
 
-    const field = (label, value) => value
-      ? `<div class="conformed-field"><span class="conformed-field-label">${label}</span><span class="conformed-field-value">${this._esc(String(value))}</span></div>`
-      : '';
+    // Dimension attributes available via JOIN (all columns except the key)
+    const dimCols = dim ? (dim.columns || []) : [];
+    const dimAttrs = dimCols.filter(c => !(c.isKey || c.isSurrogateKey) && c.id !== col.publicDimensionColId);
 
     return `
       <div class="conformed-readonly-panel">
         <div class="conformed-readonly-header">
           <div>
             <div class="conformed-readonly-source">
+              Foreign key →
               ${dim
-                ? `Conformed from <a href="#dimension/${dim.id}" style="color:var(--info);font-weight:600">${this._esc(dim.name)}</a>${dim.icon ? ' ' + dim.icon : ''}`
-                : 'Conformed dimension'}
+                ? `<a href="#dimension/${dim.id}" style="color:var(--info);font-weight:600">${dim.icon ? dim.icon + ' ' : ''}${this._esc(dim.name)}</a>`
+                : `<span style="color:var(--text-muted)">Dimension (template removed)</span>`}
             </div>
-            <div class="conformed-readonly-name">${this._esc(col.name || '—')}</div>
+            <div class="conformed-readonly-name" style="display:flex;align-items:center;gap:8px">
+              🔑 <span>${this._esc(col.name || '—')}</span>
+              <span style="font-size:12px;font-weight:400;color:var(--text-muted)">${this._esc(col.dataType || 'INT')}</span>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;flex-shrink:0">
-            ${dim ? `<button class="btn btn-ghost btn-sm" onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')">↻ Sync</button>` : ''}
+          <div style="display:flex;gap:8px;flex-shrink:0;align-items:flex-start">
+            ${dim ? `<button class="btn btn-ghost btn-sm" onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')" title="Re-sync key column name and type from template">↻ Sync</button>` : ''}
             <button class="btn btn-ghost btn-sm" style="color:var(--danger)"
+              title="Make this an independent editable column"
               onclick="Projects.detachConformed('${pId}','${eId}','${cId}')">Detach</button>
           </div>
         </div>
 
         <div class="conformed-readonly-body">
-          <div class="conformed-fields-grid">
-            ${field('Data Type', col.dataType)}
-            ${field('Category', catInfo.label)}
-            ${field('Responsibility', respInfo?.label || col.responsibilityType)}
-            ${col.isSurrogateKey ? `<div class="conformed-field"><span class="conformed-field-label">Role</span><span class="conformed-field-value conformed-key-badge">Surrogate Key</span></div>` : ''}
-            ${col.isNaturalKey  ? `<div class="conformed-field"><span class="conformed-field-label">Role</span><span class="conformed-field-value conformed-key-badge">Natural Key</span></div>` : ''}
-            ${col.scdType !== null && col.scdType !== undefined ? field('SCD Type', 'SCD' + col.scdType) : ''}
-            ${col.format ? field('Format / Examples', col.format) : ''}
+          <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${catInfo.color}18;color:${catInfo.color};border:1px solid ${catInfo.color}30">${catInfo.label}</span>
+            <span style="padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:#fef3c7;color:#92400e;border:1px solid #fde68a">FK — Snowflake ref</span>
           </div>
+
           ${col.description ? `
-          <div class="conformed-description">
+          <div class="conformed-description" style="margin-bottom:16px">
             <div class="conformed-field-label" style="margin-bottom:4px">Description</div>
             <div style="font-size:13px;color:var(--text);line-height:1.6">${this._esc(col.description)}</div>
           </div>` : ''}
-          ${col.notes ? `
-          <div class="conformed-description" style="margin-top:12px">
-            <div class="conformed-field-label" style="margin-bottom:4px">Notes</div>
-            <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${this._esc(col.notes)}</div>
+
+          ${dim && dimCols.length > 0 ? `
+          <div>
+            <div class="conformed-field-label" style="margin-bottom:8px">
+              Dimension attributes available via JOIN
+              <span style="font-size:9px;font-weight:400;color:var(--text-subtle);margin-left:4px">(${dimCols.length} column${dimCols.length !== 1 ? 's' : ''} in ${this._esc(dim.name)})</span>
+            </div>
+            <div class="conformed-dim-attr-list">
+              ${dimCols.map(c => {
+                const isKey = c.isKey || c.isSurrogateKey || c.id === col.publicDimensionColId;
+                const atCatInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[c.category]) || null;
+                return `<div class="conformed-dim-attr-row${isKey ? ' conformed-dim-attr-row-key' : ''}">
+                  <span class="conformed-dim-attr-key">${isKey ? '🔑' : ''}</span>
+                  <span class="conformed-dim-attr-name">${this._esc(c.name)}</span>
+                  <span class="conformed-dim-attr-type">${c.dataType || 'VARCHAR'}</span>
+                  ${atCatInfo ? `<span class="conformed-dim-attr-cat" style="color:${atCatInfo.color}">${atCatInfo.label}</span>` : ''}
+                  ${c.description ? `<span class="conformed-dim-attr-desc" title="${this._esc(c.description)}">— ${this._esc(c.description)}</span>` : ''}
+                </div>`;
+              }).join('')}
+            </div>
           </div>` : ''}
         </div>
 
         <div class="conformed-readonly-footer">
-          This column is inherited from the <strong>${dim ? this._esc(dim.name) : 'dimension'}</strong> template and cannot be edited directly.
-          Use <strong>Detach</strong> to make it an independent column, or
-          ${dim ? `edit the template in the <a href="#dimension/${dim.id}" style="color:var(--info)">Dimension Library</a> and click <strong>↻ Sync</strong> to pull updates.` : 'sync to refresh from the template.'}
+          Snowflake model — only this foreign key lives in the event.
+          ${dim
+            ? `Join to <a href="#dimension/${dim.id}" style="color:var(--info)">${this._esc(dim.name)}</a> to access dimension attributes.`
+            : ''}
+          Use <strong>Detach</strong> to convert this to an independent column.
         </div>
       </div>
     `;
@@ -1225,33 +1238,28 @@ const Projects = {
           const allDims2 = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
           const dim = allDims2.find(d => d.id === dimId);
           if (!dim || !(dim.columns || []).length) { Modal.shake(); return; }
-          // Add ALL columns from the dimension template
+          // Snowflake model — only the key (FK) column lives in the event
+          const keyCol = (dim.columns || []).find(c => c.isKey || c.isSurrogateKey)
+            || (dim.columns || [])[0];
+          const newCol = {
+            ...base,
+            id: Storage.generateId(),
+            name: keyCol.name,
+            category: dim.category || keyCol.category || 'who',
+            dataType: keyCol.dataType || 'INT',
+            description: `Foreign key to ${dim.name}`,
+            responsibilityType: keyCol.responsibilityType || 'none',
+            publicDimensionId: dimId,
+            publicDimensionColId: keyCol.id,
+            isConformed: true
+          };
           const project2 = Storage.getProject(projectId);
           const event2 = project2.events.find(e => e.id === eventId);
           if (!event2) return;
-          let firstColId = null;
-          dim.columns.forEach(dimCol => {
-            const newCol = {
-              ...base,
-              id: Storage.generateId(),
-              name: dimCol.name,
-              category: dimCol.category || dim.category || 'who',
-              dataType: dimCol.dataType || 'VARCHAR',
-              description: dimCol.description || '',
-              responsibilityType: dimCol.responsibilityType || 'none',
-              isSurrogateKey: dimCol.isKey || false,
-              hierarchyLevel: dimCol.hierarchyLevel || null,
-              isParentKey: dimCol.isParentKey || false,
-              publicDimensionId: dimId,
-              publicDimensionColId: dimCol.id,
-              isConformed: true
-            };
-            if (!firstColId) firstColId = newCol.id;
-            event2.columns.push(newCol);
-          });
+          event2.columns.push(newCol);
           Storage.saveEvent(projectId, event2);
           Modal.hide();
-          Projects.renderEventDetail(projectId, eventId, firstColId, 'summary');
+          Projects.renderEventDetail(projectId, eventId, newCol.id, 'summary');
           return;
         } else {
           const name = document.getElementById('colName')?.value.trim();
@@ -1277,7 +1285,7 @@ const Projects = {
   },
 
   // Called when user picks a dimension template in the add-column modal
-  // Shows a preview of all columns that will be dropped in
+  // Shows the FK key that will be added + the dim attributes available via JOIN
   _onDimTemplateChange(dimId) {
     const preview = document.getElementById('colDimPreview');
     if (!preview) return;
@@ -1286,19 +1294,29 @@ const Projects = {
     const dim = allDims.find(d => d.id === dimId);
     if (!dim) { preview.innerHTML = ''; return; }
     const cols = dim.columns || [];
+    const keyCol = cols.find(c => c.isKey || c.isSurrogateKey) || cols[0];
+    const attrCols = cols.filter(c => c !== keyCol);
     preview.innerHTML = `
-      <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px;margin-top:4px">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1d4ed8;margin-bottom:8px">
-          ${cols.length} column${cols.length !== 1 ? 's' : ''} will be added
+      <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-top:6px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1d4ed8;margin-bottom:8px">FK column added to event</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#dbeafe;border-radius:4px;margin-bottom:10px">
+          <span style="font-size:13px">🔑</span>
+          <span style="font-weight:600;color:#1e3a8a;font-size:13px">${keyCol ? Projects._esc(keyCol.name) : '—'}</span>
+          <span style="color:#3b82f6;font-size:11px">${keyCol ? (keyCol.dataType || 'INT') : ''}</span>
         </div>
-        ${cols.map(c => `
-          <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">
-            <span style="color:#1d4ed8;font-size:10px">${c.isKey ? '🔑' : '○'}</span>
-            <span style="font-weight:500;color:#111">${Projects._esc(c.name)}</span>
-            <span style="color:#6b7280;font-size:11px">${c.dataType || 'VARCHAR'}</span>
-            ${c.description ? `<span style="color:#9ca3af;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${Projects._esc(c.description)}">— ${Projects._esc(c.description)}</span>` : ''}
-          </div>`).join('')}
-        <div style="font-size:10px;color:#6b7280;margin-top:8px">All columns will be marked as conformed and cannot be edited directly.</div>
+        ${attrCols.length > 0 ? `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:6px">
+          ${attrCols.length} attribute${attrCols.length !== 1 ? 's' : ''} available via JOIN
+        </div>
+        ${attrCols.map(c => `
+          <div style="display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:11px;color:#6b7280">
+            <span style="width:6px;height:6px;border-radius:50%;background:#d1d5db;flex-shrink:0"></span>
+            <span style="color:#374151">${Projects._esc(c.name)}</span>
+            <span style="color:#9ca3af">${c.dataType || 'VARCHAR'}</span>
+          </div>`).join('')}` : ''}
+        <div style="font-size:10px;color:#9ca3af;margin-top:8px;padding-top:6px;border-top:1px solid #bfdbfe">
+          Snowflake model — only the foreign key lives in the event. Attributes are available via JOIN to the dimension table.
+        </div>
       </div>`;
   },
 
