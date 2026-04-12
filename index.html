@@ -1184,6 +1184,56 @@
       }
     });
 
+    // ─── App Settings (tool visibility preferences) ────────
+    const AppSettings = {
+      KEY: 'beam_settings',
+      defaults: {
+        showSapMigration:     true,
+        showMlOpportunities:  true,
+        showGrainAnalysis:    true,
+        showHierarchies:      true,
+        showArchitecture:     true,
+        showCashFlow:         true,
+        showPlMapper:         true,
+        showBusinessAreas:    true,
+        showResponsibility:   true,
+        showSapTechTab:       true,
+        showHierarchyTab:     true,
+        showStageMappingTab:  true,
+      },
+      get() {
+        try {
+          const raw = localStorage.getItem(this.KEY);
+          return raw ? { ...this.defaults, ...JSON.parse(raw) } : { ...this.defaults };
+        } catch { return { ...this.defaults }; }
+      },
+      set(key, value) {
+        const s = this.get();
+        s[key] = value;
+        localStorage.setItem(this.KEY, JSON.stringify(s));
+        applyNavVisibility();
+      },
+    };
+
+    function applyNavVisibility() {
+      const s = AppSettings.get();
+      const map = {
+        'sap-migration':    s.showSapMigration,
+        'ml-opportunities': s.showMlOpportunities,
+        'grain-analysis':   s.showGrainAnalysis,
+        'hierarchies':      s.showHierarchies,
+        'architecture':     s.showArchitecture,
+        'cashflow':         s.showCashFlow,
+        'pl-mapper':        s.showPlMapper,
+        'business-areas':   s.showBusinessAreas,
+        'responsibility':   s.showResponsibility,
+      };
+      Object.entries(map).forEach(([section, visible]) => {
+        const el = document.querySelector(`.nav-item[data-section="${section}"]`);
+        if (el) el.classList.toggle('nav-item-hidden', !visible);
+      });
+    }
+
     // ─── Toast helper ──────────────────────────────────────
     function showToast(message, duration = 2500) {
       const container = document.getElementById('toast-container');
@@ -1248,6 +1298,9 @@
     Router.register('recents',  () => renderRecents());
     Router.register('guide',    () => renderGuide());
     Router.register('settings', () => renderSettings());
+
+    // Apply nav visibility on initial load
+    applyNavVisibility();
 
     // ─── Recents view ──────────────────────────────────────
     function renderRecents() {
@@ -1355,14 +1408,59 @@
     // ─── Settings view ─────────────────────────────────────
     function renderSettings() {
       const app = document.getElementById('app');
+      const s = AppSettings.get();
+
+      function togRow(label, desc, key, val) {
+        return `
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <div class="settings-toggle-label">${label}</div>
+              ${desc ? `<div class="settings-toggle-desc">${desc}</div>` : ''}
+            </div>
+            <label class="settings-switch">
+              <input type="checkbox" ${val ? 'checked' : ''} onchange="AppSettings.set('${key}',this.checked);renderSettings()">
+              <span class="settings-switch-track"></span>
+            </label>
+          </div>`;
+      }
+
       app.innerHTML = `
         <div class="view-header">
           <div>
             <h1 class="view-title">Settings</h1>
+            <p class="view-subtitle">Customise visibility and preferences</p>
           </div>
         </div>
-        <div style="max-width:480px">
+        <div style="max-width:560px">
+
           <div class="export-section">
+            <h3>Analysis Tools</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+              Hide tools you don't need yet to keep the sidebar focused for new users.
+              Data and settings are preserved — you can re-enable at any time.
+            </p>
+            ${togRow('P&amp;L Mapper', 'Map measures to P&amp;L lines and manage GL account ranges', 'showPlMapper', s.showPlMapper)}
+            ${togRow('Business Areas', 'Tag events by business domain', 'showBusinessAreas', s.showBusinessAreas)}
+            ${togRow('Grain Analysis', 'Compare event grains and identify drill-across opportunities', 'showGrainAnalysis', s.showGrainAnalysis)}
+            ${togRow('Responsibility Register', 'SAP cost object accountability matrix', 'showResponsibility', s.showResponsibility)}
+            ${togRow('Architecture', 'High-level data flow and component diagrams', 'showArchitecture', s.showArchitecture)}
+            ${togRow('Cash Flow', 'Map measures to cash flow statement lines', 'showCashFlow', s.showCashFlow)}
+            ${togRow('ML Opportunities', 'Identify machine learning use cases from event structure', 'showMlOpportunities', s.showMlOpportunities)}
+            ${togRow('SAP Migration', 'ECC→S/4HANA migration readiness tracking', 'showSapMigration', s.showSapMigration)}
+            ${togRow('Hierarchy Editor', 'Manage dimension hierarchies (SAP H-tables, BI-layer, etc.)', 'showHierarchies', s.showHierarchies)}
+          </div>
+
+          <div class="export-section" style="margin-top:16px">
+            <h3>Column Editor Tabs</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+              Control which tabs appear in the column detail panel. SAP Tech tab only appears for SAP-sourced columns.
+            </p>
+            ${togRow('SAP Technical Reference tab', 'SAP Table, SAP Field, Migration Status, CO-PA fields', 'showSapTechTab', s.showSapTechTab)}
+            ${togRow('Hierarchy tab', 'Column hierarchy level, parent column, and rollup structure', 'showHierarchyTab', s.showHierarchyTab)}
+            ${togRow('Stage Mapping tab', 'ETL source extraction, transformation rules, data quality', 'showStageMappingTab', s.showStageMappingTab)}
+          </div>
+
+          <div class="export-section" style="margin-top:16px">
             <h3>Data Management</h3>
             <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
               All data is stored in your browser's localStorage. Nothing is sent to a server.

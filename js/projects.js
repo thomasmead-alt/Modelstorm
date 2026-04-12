@@ -258,6 +258,7 @@ const Projects = {
           <button class="btn btn-ghost btn-sm" onclick="Export.eventToCSV(Storage.getProject('${projectId}').events.find(e=>e.id==='${eventId}'))">Export CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="Export.printEvent(Storage.getProject('${projectId}').events.find(e=>e.id==='${eventId}'),'${this._esc(project.name)}')">Print</button>
           <button class="btn btn-ghost btn-sm" onclick="Projects.generateSampleData('${projectId}','${eventId}')">Sample Data</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${eventId}')">View Diagram</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${eventId}')">Edit Matrix</button>
           <button class="btn btn-primary btn-sm" onclick="Projects.openAddColumnModal('${projectId}', '${eventId}')">+ Add Column</button>
         </div>
@@ -374,11 +375,12 @@ const Projects = {
   _validTabs(col) {
     const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
     const isMeasure = col.category === 'how_many';
+    const vis = typeof AppSettings !== 'undefined' ? AppSettings.get() : {};
     return [
       { id: 'summary',   label: 'Summary',      show: true },
-      { id: 'technical', label: 'SAP Tech',      show: isSAP },
-      { id: 'hierarchy', label: 'Hierarchy',     show: !isMeasure },
-      { id: 'stage',     label: 'Stage Mapping', show: true },
+      { id: 'technical', label: 'SAP Tech',      show: isSAP && vis.showSapTechTab !== false },
+      { id: 'hierarchy', label: 'Hierarchy',     show: !isMeasure && vis.showHierarchyTab !== false },
+      { id: 'stage',     label: 'Stage Mapping', show: vis.showStageMappingTab !== false },
       { id: 'notes',     label: 'Notes',         show: true },
     ].filter(t => t.show);
   },
@@ -418,9 +420,19 @@ const Projects = {
     const dim = allDims.find(d => d.id === col.publicDimensionId);
     const catInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { label: col.category, color: '#6b7280' };
 
-    // Dimension attributes available via JOIN (all columns except the key)
+    // Dimension attributes available via JOIN
     const dimCols = dim ? (dim.columns || []) : [];
-    const dimAttrs = dimCols.filter(c => !(c.isKey || c.isSurrogateKey) && c.id !== col.publicDimensionColId);
+
+    // Hierarchies defined for this dimension
+    const hierarchies = typeof Storage.getHierarchies === 'function'
+      ? Storage.getHierarchies(col.publicDimensionId) : [];
+    const hierOpts = `<option value="" ${!col.hierarchyId ? 'selected' : ''}>— No hierarchy —</option>`
+      + hierarchies.map(h => {
+          const typeLabels = { sap: 'SAP', tool: 'Tool', custom: 'Custom' };
+          const tl = typeLabels[h.type] || h.type;
+          return `<option value="${h.id}" ${col.hierarchyId === h.id ? 'selected' : ''}>[${tl}] ${this._esc(h.name)}</option>`;
+        }).join('');
+    const selHier = col.hierarchyId ? hierarchies.find(h => h.id === col.hierarchyId) : null;
 
     return `
       <div class="conformed-readonly-panel">
@@ -456,6 +468,24 @@ const Projects = {
             <div class="conformed-field-label" style="margin-bottom:4px">Description</div>
             <div style="font-size:13px;color:var(--text);line-height:1.6">${this._esc(col.description)}</div>
           </div>` : ''}
+
+          <div style="margin-bottom:16px">
+            <div class="conformed-field-label" style="margin-bottom:6px">
+              Hierarchy
+              ${hierarchies.length === 0 && dim ? `<span style="font-size:10px;font-weight:400;color:var(--text-subtle);margin-left:6px">
+                — <a href="#hierarchy-editor/${col.publicDimensionId}" style="color:var(--info)">Add hierarchies in Hierarchy Editor</a>
+              </span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <select style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;flex:1"
+                onchange="Projects.updateColField('${pId}','${eId}','${cId}','hierarchyId',this.value,false)">${hierOpts}</select>
+              ${selHier ? `<a href="#hierarchy-editor/${col.publicDimensionId}" style="font-size:11px;white-space:nowrap;color:var(--info)">View →</a>` : ''}
+            </div>
+            ${selHier ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+              ${selHier.type === 'sap' ? '🔷 SAP' : selHier.type === 'tool' ? '🔵 Tool' : '⬜ Custom'} hierarchy
+              ${selHier.description ? `— ${this._esc(selHier.description)}` : ''}
+            </div>` : ''}
+          </div>
 
           ${dim && dimCols.length > 0 ? `
           <div>
@@ -1237,20 +1267,23 @@ const Projects = {
           if (!dimId) { Modal.shake(); return; }
           const allDims2 = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
           const dim = allDims2.find(d => d.id === dimId);
-          if (!dim || !(dim.columns || []).length) { Modal.shake(); return; }
+          if (!dim) { showToast('Dimension template not found', 'error'); return; }
+          if (!(dim.columns || []).length) { showToast('Dimension has no columns — add columns in the Dimension Library first', 'error'); return; }
           // Snowflake model — only the key (FK) column lives in the event
           const keyCol = (dim.columns || []).find(c => c.isKey || c.isSurrogateKey)
             || (dim.columns || [])[0];
+          // Fallback names for custom dims where name may not yet be filled
+          const defaultKeyName = dim.name.toLowerCase().replace(/\s+/g, '_') + '_key';
           const newCol = {
             ...base,
             id: Storage.generateId(),
-            name: keyCol.name,
+            name: keyCol.name || defaultKeyName,
             category: dim.category || keyCol.category || 'who',
             dataType: keyCol.dataType || 'INT',
             description: `Foreign key to ${dim.name}`,
             responsibilityType: keyCol.responsibilityType || 'none',
             publicDimensionId: dimId,
-            publicDimensionColId: keyCol.id,
+            publicDimensionColId: keyCol.id || '',
             isConformed: true
           };
           const project2 = Storage.getProject(projectId);

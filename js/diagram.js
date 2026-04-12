@@ -9,19 +9,70 @@ const Diagram = {
   render(event) {
     const app = document.getElementById('app');
 
-    // Dimension template lookup for conformed dim names
+    // Dimension template lookup for conformed dim names/columns
     const dimTemplates = (typeof Storage !== 'undefined' && Storage.getAllDimTemplates)
       ? Storage.getAllDimTemplates() : [];
 
-    // Group columns by category
-    const byCategory = {};
-    event.columns.forEach(col => {
-      if (!byCategory[col.category]) byCategory[col.category] = [];
-      byCategory[col.category].push(col);
-    });
+    const measures = (event.columns || []).filter(c => c.category === 'how_many');
 
-    const measures = byCategory['how_many'] || [];
-    const dimEntries = Object.entries(byCategory).filter(([cat]) => cat !== 'how_many');
+    // ── Build dimension entries (one per dim box) ─────────────
+    // Snowflake: conformed FK columns → one box per unique template (shows full dim table)
+    // Non-conformed: grouped by category (standard star schema dim box)
+    const dimEntries = [];
+    const seenDimIds = new Set();
+
+    // Pass 1: conformed FK columns → individual dim table boxes
+    (event.columns || [])
+      .filter(c => c.category !== 'how_many' && c.isConformed && c.publicDimensionId)
+      .forEach(col => {
+        if (seenDimIds.has(col.publicDimensionId)) return; // one box per template
+        seenDimIds.add(col.publicDimensionId);
+
+        const tmpl = dimTemplates.find(d => d.id === col.publicDimensionId);
+        const catInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { label: col.category, color: '#6b7280' };
+        const boxTitle = tmpl ? tmpl.name : (col.name + ' Dim');
+
+        // Rows: full template column list (snowflake shows the real dim table)
+        let rows;
+        if (tmpl && (tmpl.columns || []).length > 0) {
+          rows = (tmpl.columns || []).map(c => {
+            const isKey = c.isKey || c.isSurrogateKey;
+            return `${isKey ? '🔑 ' : ''}${c.name} [${c.dataType || 'VARCHAR'}]`;
+          });
+        } else {
+          // No template columns — just show the FK itself
+          rows = [`🔑 ${col.name} [${col.dataType || 'INT'}]`];
+        }
+
+        dimEntries.push({ cat: col.category, catInfo, boxTitle, isConformed: true, fkCol: col, rows });
+      });
+
+    // Pass 2: non-conformed columns → group by category
+    const nonConformed = {};
+    (event.columns || [])
+      .filter(c => c.category !== 'how_many' && !(c.isConformed && c.publicDimensionId))
+      .forEach(col => {
+        if (!nonConformed[col.category]) nonConformed[col.category] = [];
+        nonConformed[col.category].push(col);
+      });
+
+    Object.entries(nonConformed).forEach(([cat, cols]) => {
+      const catInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[cat]) || { label: cat, color: '#6b7280' };
+      const boxTitle = catInfo.label + ' Dim';
+      const fkCol = cols.find(c => c.isNaturalKey || c.isFinancialAnchor) || cols[0];
+
+      const rows = cols.map(c => {
+        const anchorFlag = c.isFinancialAnchor ? ' ⚓' : '';
+        const roleTag = (c.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[c.dateKeyRole])
+          ? ` (${DATE_KEY_ROLES[c.dateKeyRole].label})` : '';
+        return `${c.name}${anchorFlag} [${c.dataType}]${roleTag}`;
+      });
+      const pkCol = cols.find(c => c.isSurrogateKey || c.isNaturalKey);
+      const pkName = pkCol ? `${pkCol.name} (PK)` : `${cat}_key (PK)`;
+      rows.unshift(pkName);
+
+      dimEntries.push({ cat, catInfo, boxTitle, isConformed: false, fkCol, rows });
+    });
 
     // --- Build fact table rows ---
     const grain = event.grain || 'transaction';
@@ -37,30 +88,19 @@ const Diagram = {
       factRows.push({ text: `Purpose: ${purposeInfo.label}`, grain: true, color: purposeInfo.color });
     }
 
-    // FK rows — use actual column names and dim template names where available
-    dimEntries.forEach(([cat, cols]) => {
-      // Find the primary FK column for this category (natural key or surrogate key, else first col)
-      const fkCol = cols.find(c => c.isNaturalKey || c.isFinancialAnchor) || cols[0];
-      const colName = (fkCol && fkCol.name) ? fkCol.name : `${cat}_key`;
+    // FK rows — one per dim entry
+    dimEntries.forEach(entry => {
+      const fkCol = entry.fkCol;
+      const colName = (fkCol && fkCol.name) ? fkCol.name : `${entry.cat}_key`;
       const anchorFlag = fkCol && fkCol.isFinancialAnchor ? ' ⚓' : '';
-
-      // Determine target dim name
-      let dimTargetName;
-      if (fkCol && fkCol.publicDimensionId) {
-        const tmpl = dimTemplates.find(d => d.id === fkCol.publicDimensionId);
-        dimTargetName = tmpl ? tmpl.name : (CATEGORIES[cat]?.label || cat) + ' Dim';
-      } else {
-        dimTargetName = (CATEGORIES[cat]?.label || cat) + ' Dim';
-      }
-
       const dateRole = (fkCol && fkCol.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[fkCol.dateKeyRole])
         ? ` [${DATE_KEY_ROLES[fkCol.dateKeyRole].label}]` : '';
 
       factRows.push({
-        text: `${colName}${anchorFlag} → ${dimTargetName}${dateRole}`,
+        text: `${colName}${anchorFlag} → ${entry.boxTitle}${dateRole}`,
         fk: true,
         isAnchor: !!(fkCol && fkCol.isFinancialAnchor),
-        cat
+        cat: entry.cat
       });
     });
 
@@ -80,33 +120,12 @@ const Diagram = {
     const numDims = dimEntries.length;
     const orbitR = Math.max(240, numDims * 45);
 
-    // --- Build dimension table boxes ---
-    const dimBoxes = dimEntries.map(([cat, cols], i) => {
+    // --- Position dimension boxes on orbit ---
+    const dimBoxes = dimEntries.map((entry, i) => {
       const angle = (2 * Math.PI * i) / numDims - Math.PI / 2;
       const bx = cx + orbitR * Math.cos(angle);
       const by = cy + orbitR * Math.sin(angle);
-      const catInfo = CATEGORIES[cat] || { label: cat, color: '#6b7280' };
-
-      // Use template name if all columns share a publicDimensionId
-      const sharedTemplateId = cols.every(c => c.publicDimensionId && c.publicDimensionId === cols[0].publicDimensionId)
-        ? cols[0].publicDimensionId : null;
-      const tmpl = sharedTemplateId ? dimTemplates.find(d => d.id === sharedTemplateId) : null;
-      const boxTitle = tmpl ? tmpl.name : (catInfo.label + ' Dim');
-      const isConformed = !!tmpl;
-
-      // Rows: show actual column names with data types and anchor flag
-      const rows = cols.map(c => {
-        const anchorFlag = c.isFinancialAnchor ? ' ⚓' : '';
-        const roleTag = (c.dateKeyRole && typeof DATE_KEY_ROLES !== 'undefined' && DATE_KEY_ROLES[c.dateKeyRole])
-          ? ` (${DATE_KEY_ROLES[c.dateKeyRole].label})` : '';
-        return `${c.name}${anchorFlag} [${c.dataType}]${roleTag}`;
-      });
-      // Add a PK row using the first key column name if available, or cat_key
-      const pkCol = cols.find(c => c.isSurrogateKey || c.isNaturalKey);
-      const pkName = pkCol ? `${pkCol.name} (PK)` : `${cat}_key (PK)`;
-      rows.unshift(pkName);
-
-      return { cat, catInfo, bx, by, rows, angle, boxTitle, isConformed };
+      return { ...entry, bx, by, angle };
     });
 
     // --- Fact box height ---
@@ -151,7 +170,8 @@ const Diagram = {
       <div class="diagram-legend">
         <div class="legend-item"><span class="legend-swatch fact-swatch"></span> Fact table (measures + foreign keys)</div>
         <div class="legend-item"><span class="legend-swatch dim-swatch"></span> Dimension table (descriptive context)</div>
-        <div class="legend-item"><span class="legend-line"></span> Foreign key relationship</div>
+        <div class="legend-item"><span style="font-size:13px">⊛</span> Conformed dimension (snowflake — shows full dim table columns)</div>
+        <div class="legend-item"><span class="legend-line"></span> Foreign key — dashed: category group &nbsp;|&nbsp; solid: conformed snowflake</div>
         <div class="legend-item"><span class="additive-badge additive-fa">FA</span> Fully Additive — safe to SUM at any grain</div>
         <div class="legend-item"><span class="additive-badge additive-sa">SA</span> Semi-Additive — cannot SUM across time</div>
         <div class="legend-item"><span class="additive-badge additive-na">NA</span> Non-Additive — must recalculate from components</div>
@@ -166,17 +186,15 @@ const Diagram = {
 
     // --- Draw connector lines first (behind boxes) ---
     dimBoxes.forEach(dim => {
-      const dimBoxH = this.BOX_HEADER_H + dim.rows.length * this.BOX_ROW_H + this.BOX_PADDING;
-      const dimBoxX = dim.bx - this.BOX_WIDTH / 2;
-      const dimBoxY = dim.by - dimBoxH / 2;
-
-      // Line from fact edge to dim edge
+      // Conformed (snowflake) FK lines: solid colored line
+      // Non-conformed (category group) lines: dashed grey
       const line = this._svgEl('line', {
         x1: cx, y1: cy,
         x2: dim.bx, y2: dim.by,
-        stroke: '#9ca3af',
-        'stroke-width': '1.5',
-        'stroke-dasharray': '5,4',
+        stroke: dim.isConformed ? dim.catInfo.color : '#9ca3af',
+        'stroke-width': dim.isConformed ? '2' : '1.5',
+        'stroke-dasharray': dim.isConformed ? 'none' : '5,4',
+        'stroke-opacity': dim.isConformed ? '0.5' : '1',
         class: 'connector'
       });
       svg.appendChild(line);

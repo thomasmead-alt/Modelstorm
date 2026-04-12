@@ -103,6 +103,8 @@ const Storage = {
         if (!col.sapModule) col.sapModule = '';
         // Phase 6: conformed dimension column reference
         if (!col.publicDimensionColId) col.publicDimensionColId = '';
+        // Hierarchy selection for conformed columns
+        if (!col.hierarchyId) col.hierarchyId = '';
         // Phase 6: stage / ETL mapping fields
         if (!col.stageSource)     col.stageSource     = '';
         if (!col.stageTarget)     col.stageTarget     = '';
