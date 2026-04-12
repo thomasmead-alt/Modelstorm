@@ -1,7 +1,7 @@
 const GrainAnalysis = {
 
   // Grain order for comparison (finer → coarser)
-  GRAIN_ORDER: ['transaction', 'daily', 'weekly', 'monthly', 'quarterly', 'annual'],
+  GRAIN_ORDER: ['transaction', 'hourly', 'daily', 'weekly', 'monthly', 'quarterly', 'annual', 'fiscal_period'],
 
   renderProjectPicker() {
     const data = Storage.load();
@@ -65,7 +65,7 @@ const GrainAnalysis = {
     `;
   },
 
-  render(projectId) {
+  render(projectId, activeTab) {
     const project = Storage.getProject(projectId);
     if (!project) { Router.navigate('grain-analysis'); return; }
 
@@ -91,6 +91,9 @@ const GrainAnalysis = {
       return;
     }
 
+    // Default to ladder if ≥3 events
+    const tab = activeTab || (events.length >= 3 ? 'ladder' : 'pairs');
+
     // Build compatibility matrix
     const pairs = [];
     for (let i = 0; i < events.length; i++) {
@@ -98,14 +101,11 @@ const GrainAnalysis = {
         pairs.push(this._comparePair(events[i], events[j]));
       }
     }
-
-    // Sort: most severe first (error > warn > ok)
     pairs.sort((a, b) => {
       const score = { error: 2, warn: 1, ok: 0 };
       return (score[b.severity] || 0) - (score[a.severity] || 0);
     });
 
-    // Shared dimensions across all events
     const sharedDims = this._findSharedDimensions(events);
 
     const app = document.getElementById('app');
@@ -125,6 +125,219 @@ const GrainAnalysis = {
         <p class="view-subtitle">${this._esc(project.name)}</p>
       </div>
 
+      <div class="grain-tab-strip">
+        <button class="${tab === 'ladder' ? 'active' : ''}"
+          onclick="GrainAnalysis.render('${project.id}', 'ladder')">Ladder Diagram</button>
+        <button class="${tab === 'pairs' ? 'active' : ''}"
+          onclick="GrainAnalysis.render('${project.id}', 'pairs')">Pair Analysis</button>
+      </div>
+
+      ${tab === 'ladder'
+        ? this._renderLadderTab(project, pairs)
+        : this._renderPairsTab(project, events, pairs, sharedDims)}
+    `;
+  },
+
+  // ── Ladder Diagram tab ────────────────────────────────────
+
+  _renderLadderTab(project, pairs) {
+    const svgContent = this._buildLadderSVG(project);
+    return `
+      <div class="info-banner">
+        <button class="info-banner-close" onclick="this.parentElement.style.display='none'">✕</button>
+        <strong>Grain Ladder Diagram</strong> — Events are positioned on the Y-axis at their grain level.
+        Arrows show relationships: <span style="color:#166534">green = same grain (drill-across)</span>,
+        <span style="color:#d97706">amber = aggregate up</span>,
+        <span style="color:#dc2626">red = disaggregate down</span>.
+        Dotted blue lines show shared conformed dimensions.
+      </div>
+      <div class="grain-diagram-toolbar">
+        <button class="btn btn-ghost btn-sm" onclick="GrainAnalysis._downloadDiagram('${project.id}')">⬇ Download SVG</button>
+      </div>
+      <div class="grain-diagram-container">
+        ${svgContent}
+      </div>
+    `;
+  },
+
+  _buildLadderSVG(project) {
+    const events = project.events;
+    const LABEL_W = 110;  // width of grain label column
+    const BOX_W   = 150;  // event box width
+    const BOX_H   = 44;   // event box height
+    const ROW_H   = 80;   // vertical spacing per grain row
+    const COL_GAP = 20;   // horizontal gap between event boxes
+    const PAD_T   = 20;   // top padding
+    const PAD_B   = 24;   // bottom padding
+
+    // Only include grains that have at least one event
+    const usedGrains = this.GRAIN_ORDER.filter(g =>
+      events.some(e => (e.grain || 'transaction') === g)
+    );
+
+    if (usedGrains.length === 0) return '<p style="color:var(--text-muted);font-size:12px;padding:16px">No events with grain information.</p>';
+
+    // Assign each event a column position within its grain row
+    const byGrain = {};
+    usedGrains.forEach(g => { byGrain[g] = []; });
+    events.forEach(e => {
+      const g = e.grain || 'transaction';
+      if (byGrain[g]) byGrain[g].push(e);
+    });
+
+    const maxCols = Math.max(...usedGrains.map(g => byGrain[g].length), 1);
+    const svgW = LABEL_W + maxCols * (BOX_W + COL_GAP) + PAD_T;
+    const svgH = PAD_T + usedGrains.length * ROW_H + PAD_B;
+
+    // Map event id → centre position {cx, cy}
+    const eventPos = {};
+    usedGrains.forEach((grain, rowIdx) => {
+      const cy = PAD_T + rowIdx * ROW_H + ROW_H / 2;
+      byGrain[grain].forEach((e, colIdx) => {
+        const cx = LABEL_W + colIdx * (BOX_W + COL_GAP) + BOX_W / 2;
+        eventPos[e.id] = { cx, cy, grain, rowIdx };
+      });
+    });
+
+    // Build grain label rows (horizontal guide lines)
+    const grainRows = usedGrains.map((grain, rowIdx) => {
+      const gi = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, color: '#6b7280' };
+      const cy = PAD_T + rowIdx * ROW_H + ROW_H / 2;
+      return `
+        <line x1="${LABEL_W - 8}" y1="${cy}" x2="${svgW - PAD_T}" y2="${cy}"
+          stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="4" y="${cy + 4}" class="grain-label"
+          style="fill:${gi.color};font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">${this._esc(gi.label || grain)}</text>
+      `;
+    }).join('');
+
+    // Build arrows between every event pair
+    const arrows = [];
+    const drillLines = [];
+    for (let i = 0; i < events.length; i++) {
+      for (let j = i + 1; j < events.length; j++) {
+        const eA = events[i], eB = events[j];
+        const posA = eventPos[eA.id], posB = eventPos[eB.id];
+        if (!posA || !posB) continue;
+
+        const pair = this._comparePair(eA, eB);
+        const { severity, direction } = pair;
+
+        // Check shared conformed dims by publicDimensionId
+        const dimsA = new Set((eA.columns || []).filter(c => c.publicDimensionId).map(c => c.publicDimensionId));
+        const dimsB = new Set((eB.columns || []).filter(c => c.publicDimensionId).map(c => c.publicDimensionId));
+        const hasSharedConformed = [...dimsA].some(d => dimsB.has(d));
+
+        // Dotted blue line for shared conformed dims at same grain
+        if (hasSharedConformed && direction === 'same') {
+          drillLines.push(`
+            <line x1="${posA.cx}" y1="${posA.cy - BOX_H / 2 - 4}"
+                  x2="${posB.cx}" y2="${posB.cy - BOX_H / 2 - 4}"
+              stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3"
+              opacity="0.7"/>
+            <text x="${(posA.cx + posB.cx) / 2}" y="${posA.cy - BOX_H / 2 - 8}"
+              style="fill:#3b82f6;font-size:9px;text-anchor:middle">conformed</text>
+          `);
+        }
+
+        const color = severity === 'ok' ? '#16a34a' : severity === 'warn' ? '#d97706' : '#dc2626';
+        const label = direction === 'up' ? '↑ agg' : direction === 'down' ? '↓ disagg' : '↔';
+
+        // Arrow path between event boxes
+        const x1 = posA.cx, y1 = posA.cy;
+        const x2 = posB.cx, y2 = posB.cy;
+
+        // Avoid drawing inside the box — offset from edge
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ox = (dx / len) * (BOX_W / 2 + 4);
+        const oy = (dy / len) * (BOX_H / 2 + 4);
+
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+
+        arrows.push(`
+          <defs>
+            <marker id="arr-${i}-${j}" markerWidth="6" markerHeight="6"
+              refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="${color}"/>
+            </marker>
+          </defs>
+          <line x1="${x1 + ox}" y1="${y1 + oy}" x2="${x2 - ox}" y2="${y2 - oy}"
+            stroke="${color}" stroke-width="1.5" opacity="0.75"
+            marker-end="url(#arr-${i}-${j})"/>
+          <text x="${mx}" y="${my - 4}"
+            style="fill:${color};font-size:9px;text-anchor:middle;font-weight:600">${label}</text>
+        `);
+      }
+    }
+
+    // Build event boxes
+    const boxes = events.map(e => {
+      const pos = eventPos[e.id];
+      if (!pos) return '';
+      const grain = e.grain || 'transaction';
+      const gi = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { color: '#6b7280', short: grain };
+      const bx = pos.cx - BOX_W / 2;
+      const by = pos.cy - BOX_H / 2;
+      const label = e.name.length > 18 ? e.name.substring(0, 16) + '…' : e.name;
+      const measures = (e.columns || []).filter(c => c.category === 'how_many').length;
+      return `
+        <g class="event-box-group" onclick="Router.navigate('event/${e.id}')" style="cursor:pointer">
+          <rect x="${bx}" y="${by}" width="${BOX_W}" height="${BOX_H}"
+            rx="6" ry="6" fill="white" stroke="${gi.color}" stroke-width="2"
+            filter="url(#shadow)"/>
+          <text x="${pos.cx}" y="${by + 16}"
+            style="fill:#111827;font-size:11px;font-weight:600;text-anchor:middle">${this._esc(label)}</text>
+          <rect x="${bx + 6}" y="${by + 24}" width="42" height="13"
+            rx="4" ry="4" fill="${gi.color}22"/>
+          <text x="${bx + 27}" y="${by + 34}"
+            style="fill:${gi.color};font-size:9px;font-weight:700;text-anchor:middle">${this._esc(gi.short || grain)}</text>
+          <text x="${bx + BOX_W - 6}" y="${by + 34}"
+            style="fill:#9ca3af;font-size:9px;text-anchor:end">${measures}m</text>
+        </g>
+      `;
+    }).join('');
+
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" id="grain-ladder-svg"
+        width="${svgW}" height="${svgH}" class="grain-diagram-svg"
+        style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+        <defs>
+          <filter id="shadow" x="-5%" y="-10%" width="110%" height="130%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+          </filter>
+        </defs>
+        <!-- Grain guide lines and labels -->
+        ${grainRows}
+        <!-- Drill-across conformed dim connectors -->
+        ${drillLines.join('')}
+        <!-- Relationship arrows -->
+        ${arrows.join('')}
+        <!-- Event boxes (on top) -->
+        ${boxes}
+      </svg>
+    `;
+  },
+
+  _downloadDiagram(projectId) {
+    const svg = document.getElementById('grain-ladder-svg');
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svg);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const project = Storage.getProject(projectId);
+    a.href = url;
+    a.download = (project ? project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'grain') + '-ladder.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  // ── Pair Analysis tab ─────────────────────────────────────
+
+  _renderPairsTab(project, events, pairs, sharedDims) {
+    return `
       <div class="info-banner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'">✕</button>
         <strong>Reading this analysis:</strong>
@@ -141,7 +354,7 @@ const GrainAnalysis = {
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px">
         ${events.map(e => {
           const grain = e.grain || 'transaction';
-          const gi = GRAINS?.[grain] || { label: grain, color: '#6b7280', short: grain };
+          const gi = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, color: '#6b7280', short: grain };
           const measures = e.columns.filter(c => c.category === 'how_many');
           const naCount = measures.filter(c => c.additiveType === 'non_additive').length;
           const saCount = measures.filter(c => c.additiveType === 'semi_additive').length;
@@ -179,7 +392,7 @@ const GrainAnalysis = {
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px">
           ${sharedDims.map(d => {
-            const cat = CATEGORIES?.[d.category] || { label: d.category, color: '#6b7280' };
+            const cat = (typeof CATEGORIES !== 'undefined' && CATEGORIES[d.category]) || { label: d.category, color: '#6b7280' };
             return `
               <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
                 <span class="badge-sm" style="background:${cat.color}">${cat.label}</span>
@@ -198,51 +411,27 @@ const GrainAnalysis = {
         <div class="compare-panel">
           <div style="font-weight:600;margin-bottom:8px;color:#166534">Aggregation UP ↑</div>
           <p style="font-size:12px;color:var(--text-muted)">When a fine-grain fact (e.g. Transaction) needs to be compared with a coarser-grain fact (e.g. Monthly Budget), aggregate the fine fact to the coarser level first.</p>
-          <div class="agg-up" style="font-size:12px;margin-top:8px">
-            Transaction → Daily → Monthly → Quarterly
-          </div>
+          <div class="agg-up" style="font-size:12px;margin-top:8px">Transaction → Daily → Monthly → Quarterly</div>
           <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
             ⚠ <strong>Semi-Additive (SA)</strong> measures cannot be simply summed across time.
             Use period-end snapshots or last-value logic instead.
-          </p>
-          <p style="font-size:12px;color:var(--text-muted)">
-            ⚠ <strong>Non-Additive (NA)</strong> measures (%, ratios) must be recalculated
-            from their numerator/denominator components at the target grain.
           </p>
         </div>
         <div class="compare-panel">
           <div style="font-weight:600;margin-bottom:8px;color:#b91c1c">Disaggregation DOWN ↓</div>
           <p style="font-size:12px;color:var(--text-muted)">When a coarse-grain fact (e.g. Monthly Budget) needs to be compared with a finer-grain fact (e.g. Daily Actuals), allocate the coarse fact to the finer level using a driver.</p>
-          <div class="agg-down" style="font-size:12px;margin-top:8px">
-            Annual → Quarterly → Monthly → Daily
-          </div>
+          <div class="agg-down" style="font-size:12px;margin-top:8px">Annual → Quarterly → Monthly → Daily</div>
           <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
-            <strong>Common allocation drivers:</strong>
-          </p>
-          <ul style="font-size:12px;color:var(--text-muted);padding-left:16px;margin:4px 0">
-            <li>Equal split (1/N periods)</li>
-            <li>Working days in period</li>
-            <li>Historical actuals ratio</li>
-            <li>Volume-based (units, headcount)</li>
-          </ul>
-          <p style="font-size:12px;color:var(--text-muted)">
-            Budget vs Actuals variance analysis is the classic case: budget at monthly grain vs
-            daily transaction actuals.
+            <strong>Common drivers:</strong> Equal split · Working days · Historical actuals ratio · Volume-based
           </p>
         </div>
         <div class="compare-panel">
           <div style="font-weight:600;margin-bottom:8px;color:#4a6cf7">Drill-Across 🔗</div>
-          <p style="font-size:12px;color:var(--text-muted)">When two same-grain facts share a conformed dimension (e.g. Date, Product), you can query both fact tables separately and join the results on the shared dimension key.</p>
-          <div class="agg-same" style="font-size:12px;margin-top:8px">
-            Event A ←→ Shared Dim ←→ Event B
-          </div>
+          <p style="font-size:12px;color:var(--text-muted)">When two same-grain facts share a conformed dimension (e.g. Date, Product), query both separately and join results on the shared dimension key.</p>
+          <div class="agg-same" style="font-size:12px;margin-top:8px">Event A ←→ Shared Dim ←→ Event B</div>
           <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
-            Example: Sales fact and Cost fact both link to the same Date and Product dimensions,
-            enabling Gross Margin calculation without a direct join between the two facts.
-          </p>
-          <p style="font-size:12px;color:var(--text-muted)">
-            Use the <strong>Dimension Library</strong> to apply standard conformed dimension
-            templates and ensure consistent key names across events.
+            Use the <strong>Dimension Library</strong> to apply standard conformed dimension templates
+            and ensure consistent key names across events.
           </p>
         </div>
       </div>

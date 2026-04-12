@@ -61,10 +61,12 @@ const PLMapper = {
     `;
   },
 
-  render(projectId) {
+  render(projectId, tab) {
     const project = Storage.getProject(projectId);
     if (!project) { Router.navigate('pl-mapper'); return; }
-    this._project = project; // store for owner chip access in _renderPlLine
+    this._project = project;
+    this._projectId = projectId;
+    this._activeTab = tab || 'measure';
 
     const plLines = Storage.getPlLines(projectId);
     const allMeasures = project.events.flatMap(e =>
@@ -88,9 +90,8 @@ const PLMapper = {
 
       <div class="info-banner">
         <button class="info-banner-close" onclick="this.parentElement.style.display='none'">✕</button>
-        <strong>P&amp;L / Income &amp; Expenditure Mapper</strong> — Drag or assign each measure to a line
-        on the I&amp;E statement. The tree on the left shows the hierarchy from Revenue down to Net Profit.
-        Use the <strong>Coverage Report</strong> to see which lines are unmodelled.
+        <strong>P&amp;L / Income &amp; Expenditure Mapper</strong> — Assign measures to I&amp;E lines
+        (Measure Model) or map GL account ranges to each line (Account Model, for SAP account-based CO-PA).
         <br><span style="color:var(--text-muted);font-size:12px">
           Additive types: <span class="additive-badge additive-fa">FA</span> Fully Additive &nbsp;
           <span class="additive-badge additive-sa">SA</span> Semi-Additive &nbsp;
@@ -101,15 +102,24 @@ const PLMapper = {
       <div class="pl-layout">
         <div>
           <div class="pl-tree">
-            <div class="pl-tree-header">I&amp;E Structure</div>
+            <div class="pl-tree-header">I&amp;E Structure
+              <span style="font-size:10px;color:#9ca3af;font-weight:400;margin-left:8px">click line to set GL range</span>
+            </div>
             ${this._renderPlTree(plLines, allMeasures)}
           </div>
         </div>
         <div class="pl-assign-panel">
-          <h3 style="margin:0 0 12px;font-size:14px;font-weight:600">Assign Measures to P&amp;L Lines</h3>
-          ${allMeasures.length === 0
-            ? '<p style="color:var(--text-muted);font-size:13px">No <em>How many</em> measures defined yet. Add measures in the BEAM matrix.</p>'
-            : allMeasures.map(m => this._measureRow(m, plLines, projectId)).join('')}
+          <div class="pl-account-tab">
+            <button class="${this._activeTab === 'measure' ? 'active' : ''}"
+              onclick="PLMapper.render('${projectId}', 'measure')">Measure Assignment</button>
+            <button class="${this._activeTab === 'account' ? 'active' : ''}"
+              onclick="PLMapper.render('${projectId}', 'account')">Account Model</button>
+          </div>
+          ${this._activeTab === 'account'
+            ? this._renderAccountModel(project, plLines)
+            : (allMeasures.length === 0
+              ? '<p style="color:var(--text-muted);font-size:13px">No <em>How many</em> measures defined yet. Add measures in the BEAM matrix.</p>'
+              : allMeasures.map(m => this._measureRow(m, plLines, projectId)).join(''))}
         </div>
       </div>
     `;
@@ -149,26 +159,129 @@ const PLMapper = {
 
     const childrenHtml = children.map(c => this._renderPlLine(c, allLines, byLine, depth + 1)).join('');
 
-    // Owner chip from plLine.ownerId
+    // Owner chip — first check cost objects, fall back to old responsibilityRegister
     const ownerChip = line.ownerId && this._project
       ? (() => {
+          const co = (this._project.costObjects || []).find(o => o.id === line.ownerId);
+          if (co) return `<span style="display:inline-flex;align-items:center;gap:3px;background:${co.color}18;color:${co.color};border:1px solid ${co.color}40;border-radius:8px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">${this._esc(co.objectId)}</span>`;
           const person = (this._project.responsibilityRegister || []).find(p => p.id === line.ownerId);
           return person ? `<span style="display:inline-flex;align-items:center;gap:3px;background:${person.color}18;color:${person.color};border:1px solid ${person.color}40;border-radius:8px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:6px">${this._esc(person.name.split(' ')[0])}</span>` : '';
         })()
       : '';
 
+    // GL account range display
+    const hasRange = line.glAccountFrom || line.glAccountTo;
+    const rangeHtml = hasRange
+      ? `<span style="font-size:10px;color:#0369a1;margin-left:6px">${this._esc(line.glAccountFrom || '…')}–${this._esc(line.glAccountTo || '…')}</span>`
+      : '';
+    const projectId = this._projectId || '';
+
     return `
       <div class="pl-line ${typeClass}" style="padding-left:${8 + depth * 16}px">
-        <div class="pl-line-header">
+        <div class="pl-line-header" style="cursor:pointer" onclick="PLMapper._toggleLineRange('${line.id}')">
           <span class="pl-line-name">${this._esc(line.name)}</span>
           ${line.sign ? `<span style="font-size:10px;color:var(--text-subtle);margin-left:4px">${line.sign > 0 ? '+' : '−'}</span>` : ''}
           ${ownerChip}
+          ${rangeHtml}
           ${measures.length ? `<span class="pl-line-count">${measures.length}</span>` : ''}
+        </div>
+        <div class="pl-line-range-row" id="range-${line.id}" style="display:none">
+          <label style="font-size:11px;color:var(--text-muted)">GL From
+            <input type="text" value="${this._esc(line.glAccountFrom || '')}" maxlength="12"
+              onchange="PLMapper._saveLineRange('${projectId}','${line.id}','glAccountFrom',this.value)"
+              placeholder="e.g. 400000">
+          </label>
+          <label style="font-size:11px;color:var(--text-muted)">GL To
+            <input type="text" value="${this._esc(line.glAccountTo || '')}" maxlength="12"
+              onchange="PLMapper._saveLineRange('${projectId}','${line.id}','glAccountTo',this.value)"
+              placeholder="e.g. 499999">
+          </label>
+          <label style="font-size:11px;color:var(--text-muted)">CE Group
+            <input type="text" value="${this._esc(line.costElementGroup || '')}"
+              onchange="PLMapper._saveLineRange('${projectId}','${line.id}','costElementGroup',this.value)"
+              placeholder="e.g. CEG_REV">
+          </label>
+          <label style="font-size:11px;color:var(--text-muted)">FS Item
+            <input type="text" value="${this._esc(line.fsItem || '')}"
+              onchange="PLMapper._saveLineRange('${projectId}','${line.id}','fsItem',this.value)"
+              placeholder="e.g. FS_REVN">
+          </label>
         </div>
         ${measureChips ? `<div class="pl-measure-chips">${measureChips}</div>` : ''}
       </div>
       ${childrenHtml}
     `;
+  },
+
+  _toggleLineRange(lineId) {
+    const el = document.getElementById('range-' + lineId);
+    if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+  },
+
+  _saveLineRange(projectId, lineId, field, value) {
+    Storage.savePlLine(projectId, lineId, field, value);
+    // Update in-memory project reference
+    this._project = Storage.getProject(projectId);
+  },
+
+  _renderAccountModel(project, plLines) {
+    const coverage = this._computeAccountCoverage(project, plLines);
+    const matched = coverage.filter(m => m.matchedLine).length;
+    const total = coverage.length;
+    const pct = total ? Math.round(matched / total * 100) : 0;
+    const linesWithRange = plLines.filter(l => l.glAccountFrom);
+
+    if (linesWithRange.length === 0) {
+      return `<div class="pl-acct-no-account" style="padding:16px;border-radius:6px;text-align:center;font-size:12px;color:var(--text-muted)">
+        No GL account ranges defined yet.<br>Click a P&amp;L line in the tree (left) to set <strong>GL From / GL To</strong> ranges.
+        <br>Measures with a <code>glAccount</code> value will then be auto-matched to the correct P&amp;L line.
+      </div>`;
+    }
+
+    return `
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px">
+          <span>GL Account Coverage</span>
+          <span>${matched} / ${total} measures matched (${pct}%)</span>
+        </div>
+        <div class="pl-coverage-bar" style="margin-bottom:16px">
+          <div class="pl-coverage-fill" style="width:${pct}%"></div>
+        </div>
+        ${coverage.length === 0
+          ? '<p style="font-size:12px;color:var(--text-muted)">No <em>How many</em> measures have a GL Account value set. Edit measures in the BEAM matrix → Notes → GL Account field.</p>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="background:#f9fafb">
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">Measure</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">Event</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">GL Account</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">Matched P&amp;L Line</th>
+              </tr></thead>
+              <tbody>
+                ${coverage.map(m => `
+                  <tr class="${m.matchedLine ? 'pl-acct-match' : 'pl-acct-unmatched'}">
+                    <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6">${this._esc(m.name)}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--text-muted)">${this._esc(m.eventName)}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6"><code>${this._esc(m.glAccount)}</code></td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6">${m.matchedLine ? this._esc(m.matchedLine.name) : '<span style="color:#d97706">No match</span>'}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>`}
+      </div>
+    `;
+  },
+
+  _computeAccountCoverage(project, plLines) {
+    const lines = plLines.filter(l => l.glAccountFrom && l.glAccountTo);
+    const allMeasures = (project.events || []).flatMap(e =>
+      (e.columns || []).filter(c => c.category === 'how_many' && c.glAccount)
+        .map(c => ({ ...c, eventName: e.name }))
+    );
+    return allMeasures.map(m => {
+      const line = lines.find(l =>
+        String(m.glAccount) >= String(l.glAccountFrom) && String(m.glAccount) <= String(l.glAccountTo)
+      );
+      return { ...m, matchedLine: line || null };
+    });
   },
 
   _measureRow(m, plLines, projectId) {

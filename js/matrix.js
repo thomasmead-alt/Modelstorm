@@ -694,8 +694,134 @@ const Matrix = {
           </div>
         </div>
       </div>
+      ${this._subledgerPanel(event, project)}
       ${event.columns.length > 0 ? this._completenessBar(event.columns) : ''}
     `;
+  },
+
+  // ── SAP Subledger panel ───────────────────────────────────
+
+  _subledgerPanel(event, project) {
+    const subledgers = event.subledgers || [];
+    const subRows = subledgers.map(s => {
+      const info = (typeof SAP_SUBLEDGERS !== 'undefined' && SAP_SUBLEDGERS[s.module])
+        || { label: s.module, color: '#6b7280', bg: '#f3f4f6' };
+      const sysBadge = s.sourceSystem
+        ? `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:#374151">${this._esc(s.sourceSystem)}</span>`
+        : '';
+      const tableInfo = s.primaryTable ? `<code style="font-size:10px">${this._esc(s.primaryTable)}</code>` : '';
+      const cdsInfo = s.cdsViewOrDS ? `<span style="font-size:10px;color:var(--text-muted)">${this._esc(s.extractMethod || 'CDS')}: ${this._esc(s.cdsViewOrDS)}</span>` : (s.extractMethod ? `<span style="font-size:10px;color:var(--text-muted)">${this._esc(s.extractMethod)}</span>` : '');
+      return `
+        <div class="subledger-row">
+          <span class="subledger-tag" style="background:${info.bg};color:${info.color}">${this._esc(info.label)}</span>
+          ${sysBadge}
+          ${tableInfo}
+          ${cdsInfo}
+          ${s.notes ? `<span style="font-size:10px;color:var(--text-subtle);flex:1">${this._esc(s.notes)}</span>` : '<span style="flex:1"></span>'}
+          <button class="btn-icon" style="color:var(--danger);flex-shrink:0"
+            onclick="Matrix._removeSubledger('${event.id}', '${project.id}', '${s.id}')" title="Remove">✕</button>
+        </div>
+      `;
+    }).join('');
+
+    const moduleOpts = typeof SAP_SUBLEDGERS !== 'undefined'
+      ? Object.entries(SAP_SUBLEDGERS).map(([k, s]) =>
+          `<option value="${k}">${s.label} — ${s.desc}</option>`).join('')
+      : '';
+
+    return `
+      <div class="subledger-panel">
+        <div class="subledger-panel-header">
+          SAP Subledger Sources
+          <button class="btn-sm" onclick="Matrix._toggleSubledgerForm('sub-form-${event.id}')">+ Add</button>
+        </div>
+        ${subledgers.length === 0
+          ? `<div class="subledger-empty">No subledger sources linked — click <strong>+ Add</strong> to declare which SAP modules feed this event</div>`
+          : subRows}
+        <div id="sub-form-${event.id}" style="display:none">
+          <div class="subledger-add-form">
+            <label>Module
+              <select id="sub-module-${event.id}"
+                onchange="Matrix._prefillSubledgerTable('${event.id}')">
+                ${moduleOpts}
+              </select>
+            </label>
+            <label>Source System
+              <select id="sub-sys-${event.id}">
+                <option value="ECC">ECC</option>
+                <option value="S/4HANA">S/4HANA</option>
+                <option value="Both">Both</option>
+              </select>
+            </label>
+            <label>Primary Table
+              <input type="text" id="sub-table-${event.id}" placeholder="e.g. BSEG, ACDOCA">
+            </label>
+            <label>Join Tables
+              <input type="text" id="sub-joins-${event.id}" placeholder="e.g. BKPF, LFA1">
+            </label>
+            <label>Extract Method
+              <select id="sub-method-${event.id}">
+                <option value="">— Select —</option>
+                <option value="CDS">CDS View</option>
+                <option value="RFC">RFC / BAPI</option>
+                <option value="ODBC">ODBC</option>
+                <option value="Flat File">Flat File</option>
+                <option value="API">OData API</option>
+              </select>
+            </label>
+            <label>CDS View / DataSource
+              <input type="text" id="sub-cds-${event.id}" placeholder="e.g. I_JournalEntry">
+            </label>
+            <label style="grid-column:1/-1">Notes
+              <input type="text" id="sub-notes-${event.id}" placeholder="Optional notes">
+            </label>
+            <div class="subledger-add-actions">
+              <button class="btn btn-primary btn-sm"
+                onclick="Matrix._addSubledger('${event.id}', '${project.id}')">Add Subledger</button>
+              <button class="btn btn-ghost btn-sm"
+                onclick="Matrix._toggleSubledgerForm('sub-form-${event.id}')">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _toggleSubledgerForm(formId) {
+    const el = document.getElementById(formId);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  },
+
+  _prefillSubledgerTable(eventId) {
+    const sel = document.getElementById('sub-module-' + eventId);
+    const tableInput = document.getElementById('sub-table-' + eventId);
+    if (!sel || !tableInput) return;
+    const info = typeof SAP_SUBLEDGERS !== 'undefined' ? SAP_SUBLEDGERS[sel.value] : null;
+    if (info && !tableInput.value) tableInput.value = info.primaryTable || '';
+  },
+
+  _addSubledger(eventId, projectId) {
+    const module    = document.getElementById('sub-module-' + eventId)?.value || '';
+    const sys       = document.getElementById('sub-sys-' + eventId)?.value || 'ECC';
+    const table     = document.getElementById('sub-table-' + eventId)?.value.trim() || '';
+    const joins     = document.getElementById('sub-joins-' + eventId)?.value.trim() || '';
+    const method    = document.getElementById('sub-method-' + eventId)?.value || '';
+    const cds       = document.getElementById('sub-cds-' + eventId)?.value.trim() || '';
+    const notes     = document.getElementById('sub-notes-' + eventId)?.value.trim() || '';
+    if (!module) return;
+    const sub = {
+      id: Storage.generateId(), module,
+      sourceSystem: sys, primaryTable: table,
+      joinTables: joins, extractMethod: method,
+      cdsViewOrDS: cds, notes
+    };
+    Storage.saveSubledger(projectId, eventId, sub);
+    Matrix.renderEvent(eventId);
+  },
+
+  _removeSubledger(eventId, projectId, subId) {
+    Storage.deleteSubledger(projectId, eventId, subId);
+    Matrix.renderEvent(eventId);
   },
 
   // ── Column completeness score ─────────────────────────────

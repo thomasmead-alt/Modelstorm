@@ -26,72 +26,89 @@ const Storage = {
   // ── Backward-compatible migration ────────────────────────
   // Adds new fields with safe defaults to any existing data
 
+  // Per-project migration — also called directly during JSON import
+  _migrateProject(p) {
+    // Project-level new fields
+    if (!p.businessAreas) p.businessAreas = [];
+    if (!p.plLines) p.plLines = null;
+    // Phase 3: responsibility register (kept for backwards compat)
+    if (!p.responsibilityRegister) p.responsibilityRegister = [];
+    // Phase 5: SAP cost object register (replaces people-based register)
+    if (!p.costObjects) p.costObjects = [];
+    // Phase 5: P&L line GL account ranges (migrate per-line if customised)
+    if (p.plLines) {
+      p.plLines = p.plLines.map(line => {
+        if (!line.glAccountFrom)    line.glAccountFrom    = '';
+        if (!line.glAccountTo)      line.glAccountTo      = '';
+        if (!line.costElementGroup) line.costElementGroup = '';
+        if (!line.fsItem)           line.fsItem           = '';
+        return line;
+      });
+    }
+
+    p.events = (p.events || []).map(e => {
+      // Event-level new fields
+      if (!e.grain) e.grain = 'transaction';
+      if (!e.businessAreaIds) e.businessAreaIds = [];
+      // Planning / temporal
+      if (!e.temporalType)  e.temporalType  = 'pointInTime';
+      if (!e.eventPurpose)  e.eventPurpose  = 'actuals';
+      if (!e.phasingMethod) e.phasingMethod = '';
+      if (!e.planVersionId) e.planVersionId = '';
+      if (!e.glMappings)    e.glMappings    = [];
+      // Phase 5: SAP subledger linkage
+      if (!e.subledgers)    e.subledgers    = [];
+
+      e.columns = (e.columns || []).map(col => {
+        // Phase 2: additivity, budget, responsibility, conformed dims
+        if (!col.additiveType) col.additiveType = 'fully_additive';
+        if (col.requiredGrain === undefined) col.requiredGrain = null;
+        if (!col.formula) col.formula = '';
+        if (col.budgetControl === undefined) col.budgetControl = false;
+        if (!col.plLineId) col.plLineId = '';
+        if (!col.responsibilityType) col.responsibilityType = 'none';
+        if (!col.publicDimensionId) col.publicDimensionId = '';
+        if (col.isConformed === undefined) col.isConformed = false;
+        if (!col.notes) col.notes = '';
+        // Phase 3: responsibility owner, cash flow, ML tag, SCD
+        if (!col.ownerId) col.ownerId = '';
+        if (!col.cashFlowLineId) col.cashFlowLineId = '';
+        if (col.isCashBased === undefined) col.isCashBased = false;
+        if (!col.mlTag) col.mlTag = 'none';
+        if (col.scdType === undefined) col.scdType = null;
+        if (col.isNaturalKey === undefined) col.isNaturalKey = false;
+        if (col.isSurrogateKey === undefined) col.isSurrogateKey = false;
+        // SAP FI/CO migration fields
+        if (!col.sapTable)           col.sapTable = '';
+        if (!col.sapField)           col.sapField = '';
+        if (!col.sapMigrationStatus) col.sapMigrationStatus = '';
+        if (!col.copaCharacteristic) col.copaCharacteristic = '';
+        if (!col.copaValueField)     col.copaValueField = '';
+        // Date key role + financial anchor
+        if (!col.dateKeyRole)        col.dateKeyRole     = '';
+        if (!col.joinDimension)      col.joinDimension   = '';
+        if (col.isFinancialAnchor === undefined) col.isFinancialAnchor = false;
+        // GL account mapping
+        if (!col.glAccount)          col.glAccount          = '';
+        if (!col.glAccountRangeFrom) col.glAccountRangeFrom = '';
+        if (!col.glAccountRangeTo)   col.glAccountRangeTo   = '';
+        // Hierarchy / rollup structure
+        if (col.hierarchyLevel === undefined) col.hierarchyLevel = null;
+        if (!col.hierarchyName)   col.hierarchyName   = '';
+        if (col.isParentKey === undefined) col.isParentKey = false;
+        if (!col.parentColumnId)  col.parentColumnId  = '';
+        return col;
+      });
+      return e;
+    });
+    return p;
+  },
+
   _migrate(data) {
     // Root-level new fields
     if (!data.customDimensions) data.customDimensions = [];
 
-    data.projects = (data.projects || []).map(p => {
-      // Project-level new fields
-      if (!p.businessAreas) p.businessAreas = [];
-      if (!p.plLines) p.plLines = null;
-      // Phase 3: responsibility register
-      if (!p.responsibilityRegister) p.responsibilityRegister = [];
-
-      p.events = (p.events || []).map(e => {
-        // Event-level new fields
-        if (!e.grain) e.grain = 'transaction';
-        if (!e.businessAreaIds) e.businessAreaIds = [];
-        // Planning / temporal
-        if (!e.temporalType)  e.temporalType  = 'pointInTime';
-        if (!e.eventPurpose)  e.eventPurpose  = 'actuals';
-        if (!e.phasingMethod) e.phasingMethod = '';
-        if (!e.planVersionId) e.planVersionId = '';
-        if (!e.glMappings)    e.glMappings    = [];
-
-        e.columns = (e.columns || []).map(col => {
-          // Phase 2: additivity, budget, responsibility, conformed dims
-          if (!col.additiveType) col.additiveType = 'fully_additive';
-          if (col.requiredGrain === undefined) col.requiredGrain = null;
-          if (!col.formula) col.formula = '';
-          if (col.budgetControl === undefined) col.budgetControl = false;
-          if (!col.plLineId) col.plLineId = '';
-          if (!col.responsibilityType) col.responsibilityType = 'none';
-          if (!col.publicDimensionId) col.publicDimensionId = '';
-          if (col.isConformed === undefined) col.isConformed = false;
-          if (!col.notes) col.notes = '';
-          // Phase 3: responsibility owner, cash flow, ML tag, SCD
-          if (!col.ownerId) col.ownerId = '';
-          if (!col.cashFlowLineId) col.cashFlowLineId = '';
-          if (col.isCashBased === undefined) col.isCashBased = false;
-          if (!col.mlTag) col.mlTag = 'none';
-          if (col.scdType === undefined) col.scdType = null;
-          if (col.isNaturalKey === undefined) col.isNaturalKey = false;
-          if (col.isSurrogateKey === undefined) col.isSurrogateKey = false;
-          // SAP FI/CO migration fields
-          if (!col.sapTable)           col.sapTable = '';
-          if (!col.sapField)           col.sapField = '';
-          if (!col.sapMigrationStatus) col.sapMigrationStatus = '';
-          if (!col.copaCharacteristic) col.copaCharacteristic = '';
-          if (!col.copaValueField)     col.copaValueField = '';
-          // Date key role + financial anchor
-          if (!col.dateKeyRole)        col.dateKeyRole     = '';
-          if (!col.joinDimension)      col.joinDimension   = '';
-          if (col.isFinancialAnchor === undefined) col.isFinancialAnchor = false;
-          // GL account mapping
-          if (!col.glAccount)          col.glAccount          = '';
-          if (!col.glAccountRangeFrom) col.glAccountRangeFrom = '';
-          if (!col.glAccountRangeTo)   col.glAccountRangeTo   = '';
-          // Hierarchy / rollup structure
-          if (col.hierarchyLevel === undefined) col.hierarchyLevel = null;
-          if (!col.hierarchyName)   col.hierarchyName   = '';
-          if (col.isParentKey === undefined) col.isParentKey = false;
-          if (!col.parentColumnId)  col.parentColumnId  = '';
-          return col;
-        });
-        return e;
-      });
-      return p;
-    });
+    data.projects = (data.projects || []).map(p => this._migrateProject(p));
     return data;
   },
 
@@ -205,6 +222,73 @@ const Storage = {
       });
     });
     return assigned;
+  },
+
+  // ── SAP Cost Object helpers (Phase 5) ────────────────────
+
+  saveCostObject(projectId, obj) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    if (!project.costObjects) project.costObjects = [];
+    const idx = project.costObjects.findIndex(o => o.id === obj.id);
+    if (idx >= 0) project.costObjects[idx] = obj;
+    else project.costObjects.push(obj);
+    this.save(data);
+  },
+
+  deleteCostObject(projectId, objId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    project.costObjects = (project.costObjects || []).filter(o => o.id !== objId);
+    // Clear ownerId on columns referencing this cost object
+    (project.events || []).forEach(e => {
+      (e.columns || []).forEach(col => { if (col.ownerId === objId) col.ownerId = ''; });
+    });
+    this.save(data);
+  },
+
+  // ── SAP Subledger helpers (Phase 5) ──────────────────────
+
+  saveSubledger(projectId, eventId, sub) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    if (!event.subledgers) event.subledgers = [];
+    const idx = event.subledgers.findIndex(s => s.id === sub.id);
+    if (idx >= 0) event.subledgers[idx] = sub;
+    else event.subledgers.push(sub);
+    this.save(data);
+  },
+
+  deleteSubledger(projectId, eventId, subId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    event.subledgers = (event.subledgers || []).filter(s => s.id !== subId);
+    this.save(data);
+  },
+
+  // ── P&L line helpers (Phase 5) ────────────────────────────
+
+  savePlLine(projectId, lineId, field, value) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    // Materialise project-specific lines from the default if not yet customised
+    if (!project.plLines) {
+      project.plLines = (typeof DEFAULT_PL_LINES !== 'undefined' ? DEFAULT_PL_LINES : [])
+        .map(l => ({ ...l, glAccountFrom: '', glAccountTo: '', costElementGroup: '', fsItem: '' }));
+    }
+    const line = project.plLines.find(l => l.id === lineId);
+    if (!line) return;
+    line[field] = value;
+    this.save(data);
   },
 
   // ── Responsibility register helpers ───────────────────────

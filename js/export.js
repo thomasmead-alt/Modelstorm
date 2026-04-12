@@ -182,6 +182,60 @@ const Export = {
     win.document.close();
   },
 
+  // ── Import from JSON file ────────────────────────────────
+
+  // Opens a file picker and reads the selected JSON file
+  fromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => Export.fromJSON(ev.target.result);
+      reader.readAsText(file);
+    };
+    input.click();
+  },
+
+  // Parse JSON string and import the contained project(s)
+  fromJSON(jsonStr) {
+    let parsed;
+    try { parsed = JSON.parse(jsonStr); }
+    catch { showToast('Invalid JSON file', 'error'); return; }
+
+    // Accept: full data dump { projects: [...] }, array of projects, or a single project object
+    let projects;
+    if (Array.isArray(parsed)) {
+      projects = parsed;
+    } else if (parsed.projects && Array.isArray(parsed.projects)) {
+      projects = parsed.projects;
+    } else if (parsed.id && parsed.name) {
+      projects = [parsed];
+    } else {
+      showToast('Unrecognised format — expected a project or export file', 'error');
+      return;
+    }
+
+    const data = Storage.load();
+    let imported = 0;
+    projects.forEach(p => {
+      Storage._migrateProject(p);
+      // Handle id or name conflict: assign new id and suffix name
+      const conflict = data.projects.some(x => x.id === p.id || x.name === p.name);
+      if (conflict) {
+        p.id = Storage.generateId();
+        p.name = p.name + ' (imported)';
+      }
+      data.projects.push(p);
+      imported++;
+    });
+    Storage.save(data);
+    showToast(`Imported ${imported} project${imported !== 1 ? 's' : ''}`);
+    Router.navigate('projects');
+  },
+
   _slug(str) {
     return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'export';
   },

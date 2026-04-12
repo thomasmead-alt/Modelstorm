@@ -10,6 +10,7 @@ const Projects = {
           <p class="view-subtitle">Your data warehouse design workspaces</p>
         </div>
         <div class="view-actions">
+          <button class="btn btn-secondary" onclick="Export.fromFile()">Import JSON</button>
           <button class="btn btn-primary" onclick="Projects.openNewModal()">+ New Project</button>
         </div>
       </div>
@@ -68,6 +69,7 @@ const Projects = {
         </p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="Projects.openNewModal()">+ Create your first project</button>
+          <button class="btn btn-secondary" onclick="Export.fromFile()">Import JSON</button>
           <button class="btn btn-secondary" onclick="loadExample()">Load example: Financial Margin Reporting</button>
           <button class="btn btn-secondary" onclick="loadSapExample()">Load example: SAP FI/CO Analytics Bridge</button>
         </div>

@@ -2038,3 +2038,58 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
   margin-top: 20px; padding: 16px; text-align: center;
   background: #f9fafb; border: 1px dashed var(--border); border-radius: var(--radius);
 }
+
+/* ─────────────────────────────────────────────
+   Phase 5: Import / P&L Account Model / Cost Objects / Subledgers / Grain SVG
+───────────────────────────────────────────── */
+
+/* Project JSON Import */
+.import-drop-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:24px; text-align:center; color:var(--text-subtle); margin:16px 0; }
+
+/* P&L Account Model */
+.pl-account-range { display:flex; gap:6px; align-items:center; font-size:11px; color:var(--text-muted); flex-wrap:wrap; margin-top:4px; }
+.pl-account-range input { width:80px; font-size:11px; padding:2px 5px; border:1px solid var(--border); border-radius:3px; }
+.pl-account-range label { font-size:10px; color:var(--text-subtle); }
+.pl-account-tab { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:12px; }
+.pl-account-tab button { padding:4px 12px; font-size:11px; border:none; background:transparent; cursor:pointer; color:var(--text-muted); }
+.pl-account-tab button.active { background:var(--primary); color:#fff; }
+.pl-line-range-row { background:#f9fafb; border-top:1px dashed var(--border); padding:8px 12px; display:flex; gap:12px; flex-wrap:wrap; }
+.pl-line-toggle { cursor:pointer; font-size:10px; color:var(--text-subtle); padding:1px 5px; border:1px solid var(--border); border-radius:3px; background:#fff; }
+.pl-line-toggle:hover { background:var(--bg); }
+.pl-acct-match { background:#dcfce7; }
+.pl-acct-unmatched { background:#fef3c7; }
+.pl-acct-no-account { background:#f3f4f6; color:var(--text-subtle); }
+
+/* SAP Cost Object Register */
+.cost-obj-card { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px; background:#fff; }
+.cost-obj-card:hover { border-color:#d1d5db; }
+.cost-obj-type-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; white-space:nowrap; }
+.cost-obj-filter-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:12px; }
+.cost-obj-filter-tab { padding:3px 10px; font-size:11px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; color:var(--text-muted); }
+.cost-obj-filter-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.cost-obj-form { background:#f9fafb; border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.cost-obj-form label { font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:3px; }
+.cost-obj-actions { display:flex; gap:6px; margin-top:4px; }
+.cost-obj-color-dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.cost-obj-matrix-icon { font-size:11px; font-weight:700; }
+
+/* SAP Subledger Linkage */
+.subledger-tag { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; }
+.subledger-panel { margin-top:8px; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.subledger-panel-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#f9fafb; border-bottom:1px solid var(--border); font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.subledger-row { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:12px; border-bottom:1px solid #f3f4f6; }
+.subledger-row:last-child { border-bottom:none; }
+.subledger-empty { padding:12px; text-align:center; color:var(--text-subtle); font-size:12px; }
+.subledger-add-form { padding:10px 12px; background:#f9fafb; border-top:1px solid var(--border); display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.subledger-add-form label { font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:2px; }
+.subledger-add-form input, .subledger-add-form select { font-size:11px; padding:3px 6px; border:1px solid var(--border); border-radius:3px; }
+.subledger-add-actions { grid-column:1/-1; display:flex; gap:6px; margin-top:2px; }
+
+/* Grain Analysis SVG Ladder Diagram */
+.grain-diagram-container { overflow-x:auto; padding:8px 0; background:#fff; border:1px solid var(--border); border-radius:var(--radius); }
+.grain-diagram-svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.grain-tab-strip { display:flex; gap:0; border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:14px; width:fit-content; }
+.grain-tab-strip button { padding:5px 16px; font-size:12px; border:none; background:transparent; cursor:pointer; color:var(--text-muted); border-right:1px solid var(--border); }
+.grain-tab-strip button:last-child { border-right:none; }
+.grain-tab-strip button.active { background:var(--primary); color:#fff; }
+.grain-diagram-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:8px; }

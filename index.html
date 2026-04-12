@@ -427,6 +427,33 @@
       cds:             'CDS View (VDM)',
     };
 
+    // ─── Global constants: SAP Cost Object types ──────────
+    const SAP_COST_OBJECT_TYPES = {
+      cost_centre:      { label: 'Cost Centre',      icon: '⬡', color: '#1d4ed8', bg: '#dbeafe' },
+      profit_centre:    { label: 'Profit Centre',    icon: '◈', color: '#065f46', bg: '#d1fae5' },
+      internal_order:   { label: 'Internal Order',   icon: '⊙', color: '#7c3aed', bg: '#f3e8ff' },
+      wbs_element:      { label: 'WBS Element',      icon: '⬢', color: '#c2410c', bg: '#fff7ed' },
+      company_code:     { label: 'Company Code',     icon: '⬡', color: '#0369a1', bg: '#e0f2fe' },
+      controlling_area: { label: 'Controlling Area', icon: '◎', color: '#6b7280', bg: '#f3f4f6' }
+    };
+
+    // ─── Global constants: SAP subledger modules ──────────
+    const SAP_SUBLEDGERS = {
+      fi_gl:  { label: 'FI-GL',  desc: 'General Ledger',           primaryTable: 'ACDOCA / BKPF+BSEG',   color: '#1d4ed8', bg: '#dbeafe' },
+      fi_ap:  { label: 'FI-AP',  desc: 'Accounts Payable',         primaryTable: 'BSEG (KOART=K)',        color: '#7c3aed', bg: '#f3e8ff' },
+      fi_ar:  { label: 'FI-AR',  desc: 'Accounts Receivable',      primaryTable: 'BSEG (KOART=D)',        color: '#0891b2', bg: '#cffafe' },
+      fi_aa:  { label: 'FI-AA',  desc: 'Asset Accounting',         primaryTable: 'ACDOCA / ANLP',         color: '#c2410c', bg: '#fff7ed' },
+      co_cca: { label: 'CO-CCA', desc: 'Cost Centre Accounting',   primaryTable: 'ACDOCA / COEP+CSKS',   color: '#065f46', bg: '#d1fae5' },
+      co_io:  { label: 'CO-IO',  desc: 'Internal Orders',          primaryTable: 'ACDOCA / COEP+AUFK',   color: '#92400e', bg: '#fef3c7' },
+      co_pa:  { label: 'CO-PA',  desc: 'Profitability Analysis',   primaryTable: 'ACDOCA / CE1XXXX',     color: '#166534', bg: '#dcfce7' },
+      co_pc:  { label: 'CO-PC',  desc: 'Product Costing',          primaryTable: 'ACDOCA / MLHD+MLIT',  color: '#1e40af', bg: '#dbeafe' },
+      ps:     { label: 'PS',     desc: 'Project System (WBS)',      primaryTable: 'COEP (WBS)',            color: '#6b21a8', bg: '#f3e8ff' },
+      mm:     { label: 'MM',     desc: 'Materials Management',      primaryTable: 'MKPF+MSEG / ACDOCA',  color: '#9a3412', bg: '#fff7ed' },
+      sd:     { label: 'SD',     desc: 'Sales & Distribution',      primaryTable: 'VBRK+VBRP / ACDOCA',  color: '#0f766e', bg: '#ccfbf1' },
+      pm:     { label: 'PM',     desc: 'Plant Maintenance',         primaryTable: 'AFKO+AFPO / COEP',    color: '#4d7c0f', bg: '#ecfccb' },
+      re_fx:  { label: 'RE-FX', desc: 'Real Estate',               primaryTable: 'VICAN / FICMIHD',     color: '#6b7280', bg: '#f3f4f6' }
+    };
+
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
       {
