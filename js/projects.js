@@ -216,9 +216,23 @@ const Projects = {
     if (!colId && event.columns.length > 0) colId = event.columns[0].id;
     const selectedCol = event.columns.find(c => c.id === colId) || null;
 
+    // If selected tab is not valid for this column, reset to summary
+    if (selectedCol) {
+      const validTabs = this._validTabs(selectedCol);
+      if (!validTabs.find(t => t.id === tab)) tab = 'summary';
+    }
+
     const grain = event.grain || 'transaction';
     const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, color: '#6b7280' };
     const grainBadge = `<span class="grain-badge" style="background:${grainInfo.color}18;color:${grainInfo.color};border:1px solid ${grainInfo.color}40">${this._esc(grainInfo.label)}</span>`;
+
+    const purpose = event.eventPurpose || 'actuals';
+    const purposeInfo = typeof EVENT_PURPOSES !== 'undefined' ? (EVENT_PURPOSES[purpose] || {}) : {};
+    const purposeBadge = purposeInfo.label
+      ? `<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${purposeInfo.bg||'#f3f4f6'};color:${purposeInfo.color||'#6b7280'}">${purposeInfo.short || purposeInfo.label}</span>`
+      : '';
+
+    const completeness = this._completenessStats(event);
 
     const app = document.getElementById('app');
     app.innerHTML = `
@@ -230,7 +244,10 @@ const Projects = {
           <span class="bc-sep">›</span>
           <span>${this._esc(event.name)}</span>
         </div>
-        <div class="view-actions">
+        <div class="view-actions" style="gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="Export.eventToCSV(Storage.getProject('${projectId}').events.find(e=>e.id==='${eventId}'))">Export CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="Export.printEvent(Storage.getProject('${projectId}').events.find(e=>e.id==='${eventId}'),'${this._esc(project.name)}')">Print</button>
+          <button class="btn btn-ghost btn-sm" onclick="Projects.generateSampleData('${projectId}','${eventId}')">Sample Data</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${eventId}')">Edit Matrix</button>
           <button class="btn btn-primary btn-sm" onclick="Projects.openAddColumnModal('${projectId}', '${eventId}')">+ Add Column</button>
         </div>
@@ -239,9 +256,24 @@ const Projects = {
       <div class="event-detail-wrap">
         <div class="event-detail-meta">
           ${grainBadge}
-          ${event.description ? `<span>${this._esc(event.description)}</span>` : ''}
-          <span style="margin-left:auto;color:var(--text-subtle)">${event.columns.length} column${event.columns.length !== 1 ? 's' : ''}</span>
+          ${purposeBadge}
+          ${event.description ? `<span class="event-meta-desc">${this._esc(event.description)}</span>` : ''}
+          <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0">
+            <div class="event-completeness-wrap" title="${completeness.filled}/${completeness.total} 7W categories covered">
+              ${completeness.dots}
+              <span style="font-size:10px;color:var(--text-subtle)">${completeness.filled}/${completeness.total}</span>
+            </div>
+            <span style="font-size:11px;color:var(--text-subtle)">${event.columns.length} col${event.columns.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
+
+        ${event.notes !== undefined ? `
+        <div class="event-notes-strip">
+          <textarea class="event-notes-input" placeholder="KPI context, business rules, event-level notes…" rows="1"
+            onchange="Projects.updateEventField('${projectId}','${eventId}','notes',this.value)"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            style="height:auto">${this._esc(event.notes||'')}</textarea>
+        </div>` : ''}
 
         <div class="event-detail-layout">
           <div class="col-list-panel">
@@ -252,7 +284,7 @@ const Projects = {
             <div class="col-list-body">
               ${event.columns.length === 0
                 ? `<div class="col-list-empty">No columns yet.<br>Click <strong>+ Add</strong> to begin.</div>`
-                : event.columns.map(c => this._colListItem(c, colId, projectId, eventId, tab)).join('')
+                : this._buildGroupedColList(event.columns, colId, projectId, eventId, tab)
               }
             </div>
           </div>
@@ -270,33 +302,77 @@ const Projects = {
         </div>
       </div>
     `;
+    // Auto-resize event notes textarea
+    const ta = document.querySelector('.event-notes-input');
+    if (ta && ta.value) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+  },
+
+  _completenessStats(event) {
+    const cats = Object.keys(typeof CATEGORIES !== 'undefined' ? CATEGORIES : {});
+    const filled = cats.filter(cat => (event.columns || []).some(c => c.category === cat));
+    const dots = cats.map(cat => {
+      const info = (typeof CATEGORIES !== 'undefined' && CATEGORIES[cat]) || {};
+      const has = filled.includes(cat);
+      return `<span class="completeness-dot" title="${info.label || cat}" style="background:${has ? (info.color || '#6b7280') : '#e5e7eb'}"></span>`;
+    }).join('');
+    return { filled: filled.length, total: cats.length, dots };
+  },
+
+  _buildGroupedColList(columns, selectedColId, projectId, eventId, tab) {
+    const ORDER = ['who','what','when','where','how','why','how_many'];
+    const groups = {};
+    ORDER.forEach(k => { groups[k] = []; });
+    columns.forEach(c => {
+      const key = ORDER.includes(c.category) ? c.category : 'who';
+      groups[key].push(c);
+    });
+    return ORDER.filter(k => groups[k].length > 0).map(k => {
+      const info = (typeof CATEGORIES !== 'undefined' && CATEGORIES[k]) || { label: k, color: '#6b7280' };
+      const items = groups[k].map(c => this._colListItem(c, selectedColId, projectId, eventId, tab)).join('');
+      return `<div class="col-group-header" style="border-left:3px solid ${info.color}">${this._esc(info.label)} <span class="col-group-count">${groups[k].length}</span></div>${items}`;
+    }).join('');
   },
 
   _colListItem(col, selectedColId, projectId, eventId, tab) {
     const cat = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { color: '#6b7280' };
+    const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
+    const srcBadge = isSAP
+      ? `<span style="font-size:9px;font-weight:700;color:${col.source === 'sap_s4' ? '#065f46' : '#1b6ca8'};margin-left:2px">SAP</span>`
+      : '';
     const isActive = col.id === selectedColId;
+    // Make sure selected tab is valid for this col when switching
+    const validTabs = this._validTabs(col);
+    const navTab = validTabs.find(t => t.id === tab) ? tab : 'summary';
     return `
       <div class="col-list-item${isActive ? ' active' : ''}"
-        onclick="Projects.renderEventDetail('${projectId}', '${eventId}', '${col.id}', '${tab}')">
+        onclick="Projects.renderEventDetail('${projectId}', '${eventId}', '${col.id}', '${navTab}')">
         <div class="col-cat-dot" style="background:${cat.color}"></div>
         <span class="col-item-name" title="${this._esc(col.name)}">${this._esc(col.name) || '<em style="color:var(--text-subtle)">unnamed</em>'}</span>
+        ${srcBadge}
         <span class="col-item-type">${this._esc(col.dataType || 'VARCHAR')}</span>
       </div>
     `;
+  },
+
+  _validTabs(col) {
+    const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
+    const isMeasure = col.category === 'how_many';
+    return [
+      { id: 'summary',   label: 'Summary',     show: true },
+      { id: 'technical', label: 'SAP Tech',     show: isSAP },
+      { id: 'hierarchy', label: 'Hierarchy',    show: !isMeasure },
+      { id: 'stage',     label: 'Stage Mapping', show: true },
+      { id: 'notes',     label: 'Notes',        show: true },
+      { id: 'conformed', label: 'Conformed',    show: !isMeasure },
+    ].filter(t => t.show);
   },
 
   _colDetailPanel(col, event, project, tab) {
     const pId = project.id;
     const eId = event.id;
     const cId = col.id;
-    const tabDefs = [
-      { id: 'summary',   label: 'Summary' },
-      { id: 'technical', label: 'Technical' },
-      { id: 'hierarchy', label: 'Hierarchy' },
-      { id: 'notes',     label: 'Notes' },
-      { id: 'conformed', label: 'Conformed' },
-    ];
-    const tabButtons = tabDefs.map(t =>
+    const tabs = this._validTabs(col);
+    const tabButtons = tabs.map(t =>
       `<button class="col-detail-tab${tab === t.id ? ' active' : ''}" data-tab="${t.id}"
         onclick="Projects.renderEventDetail('${pId}', '${eId}', '${cId}', '${t.id}')">${t.label}</button>`
     ).join('');
@@ -305,8 +381,10 @@ const Projects = {
     if      (tab === 'summary')   body = this._tabSummary(col, event, project);
     else if (tab === 'technical') body = this._tabTechnical(col, event, project);
     else if (tab === 'hierarchy') body = this._tabHierarchy(col, event, project);
+    else if (tab === 'stage')     body = this._tabStage(col, event, project);
     else if (tab === 'notes')     body = this._tabNotes(col, event, project);
     else if (tab === 'conformed') body = this._tabConformed(col, event, project);
+    else                          body = this._tabSummary(col, event, project);
 
     return `<div class="col-detail-tabs">${tabButtons}</div><div class="col-detail-body">${body}</div>`;
   },
@@ -316,6 +394,21 @@ const Projects = {
   _tabSummary(col, event, project) {
     const pId = project.id; const eId = event.id; const cId = col.id;
     const isMeasure = col.category === 'how_many';
+
+    // Conformed read-only: inherit from linked dim column
+    const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+    const linkedDim = allDims.find(d => d.id === col.publicDimensionId);
+    const linkedDimCol = linkedDim && col.publicDimensionColId
+      ? linkedDim.columns.find(c => c.id === col.publicDimensionColId)
+      : null;
+    const isConformedLocked = col.isConformed && !!linkedDimCol;
+
+    // Source/Origin options
+    const srcOpts = typeof SOURCES !== 'undefined'
+      ? Object.entries(SOURCES).map(([k, v]) =>
+          `<option value="${k}" ${(col.source || 'source_system') === k ? 'selected' : ''}>${v.label}</option>`).join('')
+      : `<option value="source_system">Source System</option>`;
+    const srcInfo = typeof SOURCES !== 'undefined' && col.source ? (SOURCES[col.source] || SOURCES.source_system) : null;
 
     // Category options
     const catOpts = typeof CATEGORIES !== 'undefined'
@@ -353,31 +446,54 @@ const Projects = {
     const ownerOpts = `<option value="" ${!col.ownerId ? 'selected' : ''}>— Unassigned —</option>`
       + costObjects.map(o => `<option value="${o.id}" ${col.ownerId === o.id ? 'selected' : ''}>${this._esc(o.objectId || o.description || o.id)}</option>`).join('');
 
+    const roAttr = isConformedLocked ? 'readonly disabled style="background:#f9fafb;color:var(--text-muted)"' : '';
+    const conformedBanner = isConformedLocked ? `
+      <div class="conformed-locked-banner">
+        <strong>Inherited from ${this._esc(linkedDim.name)}</strong> — ${this._esc(linkedDimCol.name)}.
+        Edit in <a href="#dimension/${linkedDim.id}" style="color:var(--info)">Dimension Library</a> or
+        <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px"
+          onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')">Sync now</button>
+        <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px;color:#ef4444"
+          onclick="Projects.updateColField('${pId}','${eId}','${cId}','publicDimensionId','',true)">Unlink</button>
+      </div>` : '';
+
     return `
+      ${conformedBanner}
       <div class="cd-section">
-        <div class="cd-section-title">Identity</div>
+        <div class="cd-section-title">Origin</div>
         <div class="cd-grid g2">
-          <div class="cd-field" style="grid-column:1/-1">
-            <label>Column Name</label>
-            <input type="text" value="${this._esc(col.name)}"
-              onchange="Projects.updateColField('${pId}','${eId}','${cId}','name',this.value,true)">
+          <div class="cd-field">
+            <label>Source / Origin</label>
+            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','source',this.value,true)">${srcOpts}</select>
+            ${srcInfo ? `<span class="src-origin-hint">${this._esc(srcInfo.description || '')}</span>` : ''}
           </div>
           <div class="cd-field">
             <label>7W Category</label>
             <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','category',this.value,true)">${catOpts}</select>
           </div>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-section-title">Identity</div>
+        <div class="cd-grid g2">
+          <div class="cd-field" style="grid-column:1/-1">
+            <label>Column Name</label>
+            <input type="text" value="${this._esc(col.name)}" ${roAttr}
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','name',this.value,true)">
+          </div>
           <div class="cd-field">
             <label>Data Type</label>
-            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','dataType',this.value,false)">${dtOpts}</select>
+            <select ${roAttr} onchange="Projects.updateColField('${pId}','${eId}','${cId}','dataType',this.value,false)">${dtOpts}</select>
           </div>
-          <div class="cd-field" style="grid-column:1/-1">
+          <div class="cd-field">
             <label>Format / Examples</label>
             <input type="text" value="${this._esc(col.format || '')}" placeholder="e.g. YYYY-MM-DD, max 255 chars"
               onchange="Projects.updateColField('${pId}','${eId}','${cId}','format',this.value,false)">
           </div>
           <div class="cd-field" style="grid-column:1/-1">
             <label>Description</label>
-            <textarea onchange="Projects.updateColField('${pId}','${eId}','${cId}','description',this.value,false)"
+            <textarea ${roAttr} onchange="Projects.updateColField('${pId}','${eId}','${cId}','description',this.value,false)"
               placeholder="What does this column represent?">${this._esc(col.description || '')}</textarea>
           </div>
         </div>
@@ -428,7 +544,7 @@ const Projects = {
         <div class="cd-section-title">Ownership</div>
         <div class="cd-grid g1">
           <div class="cd-field">
-            <label>Owner</label>
+            <label>Owner (Cost Object)</label>
             <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','ownerId',this.value,false)">${ownerOpts}</select>
           </div>
         </div>
@@ -623,6 +739,95 @@ const Projects = {
     `;
   },
 
+  // ── Tab: Stage Mapping ────────────────────────────────────
+
+  _tabStage(col, event, project) {
+    const pId = project.id; const eId = event.id; const cId = col.id;
+    const isMeasure = col.category === 'how_many';
+
+    const transformOpts = ['','direct','derived','lookup','calculated','defaulted','truncated','sign_reversed','aggregated']
+      .map(k => `<option value="${k}" ${col.transformType === k ? 'selected' : ''}>${k ? k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) : '— Not set —'}</option>`).join('');
+
+    const nullOpts = ['','allow','default','reject']
+      .map(k => `<option value="${k}" ${col.nullHandling === k ? 'selected' : ''}>${k ? k.charAt(0).toUpperCase()+k.slice(1) : '— Not set —'}</option>`).join('');
+
+    return `
+      <div class="cd-section">
+        <div class="cd-section-title">Source Extraction</div>
+        <div class="cd-grid g2">
+          <div class="cd-field">
+            <label>Source Table / Path</label>
+            <input type="text" value="${this._esc(col.stageSource||'')}" placeholder="e.g. staging.gl_line_items or BSEG.HKONT"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','stageSource',this.value,false)">
+          </div>
+          <div class="cd-field">
+            <label>Source Field / Expression</label>
+            <input type="text" value="${this._esc(col.sapField||'')}" placeholder="e.g. HKONT or s.gl_account"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','sapField',this.value,false)">
+          </div>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-section-title">Transformation</div>
+        <div class="cd-grid g2">
+          <div class="cd-field">
+            <label>Transform Type</label>
+            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','transformType',this.value,false)">${transformOpts}</select>
+          </div>
+          <div class="cd-field">
+            <label>Target Field</label>
+            <input type="text" value="${this._esc(col.stageTarget||'')}" placeholder="e.g. fact_gl.gl_account_key"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','stageTarget',this.value,false)">
+          </div>
+          <div class="cd-field" style="grid-column:1/-1">
+            <label>Mapping / Derivation Rule</label>
+            <textarea style="min-height:70px;font-family:monospace;font-size:12px"
+              placeholder="e.g. LOOKUP(dim_gl_account, source_gl_code = HKONT)"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','formula',this.value,false)">${this._esc(col.formula||'')}</textarea>
+          </div>
+          ${isMeasure ? `
+          <div class="cd-toggle">
+            <input type="checkbox" id="sr-${cId}" ${col.signReversal?'checked':''}
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','signReversal',this.checked,false)">
+            <label for="sr-${cId}">Sign Reversal (multiply by −1)</label>
+          </div>
+          <div class="cd-field">
+            <label>Unit Conversion</label>
+            <input type="text" value="${this._esc(col.unitConversion||'')}" placeholder="e.g. USD → EUR × 0.92"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','unitConversion',this.value,false)">
+          </div>` : ''}
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-section-title">Data Quality &amp; Nulls</div>
+        <div class="cd-grid g2">
+          <div class="cd-field">
+            <label>Null Handling</label>
+            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','nullHandling',this.value,false)">${nullOpts}</select>
+          </div>
+          <div class="cd-field">
+            <label>Default Value</label>
+            <input type="text" value="${this._esc(col.defaultValue||'')}" placeholder="e.g. 0 or 'UNKNOWN'"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','defaultValue',this.value,false)">
+          </div>
+          <div class="cd-field" style="grid-column:1/-1">
+            <label>Data Quality Rule</label>
+            <input type="text" value="${this._esc(col.dataQualityRule||'')}" placeholder="e.g. Must match GL master; NOT NULL; range 0–9999"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','dataQualityRule',this.value,false)">
+          </div>
+          <div class="cd-field" style="grid-column:1/-1">
+            <label>Stage / Migration Notes</label>
+            <textarea style="min-height:70px"
+              placeholder="Any special handling, caveats, or migration-specific notes for this field…"
+              onchange="Projects.updateColField('${pId}','${eId}','${cId}','stagingNote',this.value,false)">${this._esc(col.stagingNote||'')}</textarea>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
   // ── Tab: Conformed Dimensions ─────────────────────────────
 
   _tabConformed(col, event, project) {
@@ -639,31 +844,175 @@ const Projects = {
 
     const linked = allDims.find(d => d.id === col.publicDimensionId);
 
+    // Dim column picker — only shown when a dim is selected
+    const dimColOpts = linked
+      ? `<option value="" ${!col.publicDimensionColId ? 'selected' : ''}>— Select matching column —</option>`
+        + (linked.columns || []).map(c =>
+            `<option value="${c.id}" ${col.publicDimensionColId === c.id ? 'selected' : ''}>${this._esc(c.name)} (${c.dataType})</option>`
+          ).join('')
+      : '';
+
+    const linkedDimCol = linked && col.publicDimensionColId
+      ? (linked.columns || []).find(c => c.id === col.publicDimensionColId) : null;
+
     return `
       <div class="cd-section">
         <div class="cd-section-title">Conformed Dimension Link</div>
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
-          Link this column to a shared dimension template to mark it as a conformed reference.
-          Conformed dimensions ensure consistent data meaning across multiple events and marts.
+          Link to a shared dimension template — the column will inherit the template's name, type and description.
+          Conformed dimensions enable drill-across analysis between fact tables.
         </p>
         <div class="cd-grid g1">
           <div class="cd-field">
             <label>Dimension Template</label>
-            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','publicDimensionId',this.value,false)">${dimOpts}</select>
+            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','publicDimensionId',this.value,true)">${dimOpts}</select>
           </div>
+          ${linked ? `
+          <div class="cd-field">
+            <label>Matching Column in ${this._esc(linked.name)}</label>
+            <select onchange="Projects.conformToColId('${pId}','${eId}','${cId}',this.value)">${dimColOpts}</select>
+          </div>` : ''}
         </div>
         ${col.isConformed && linked ? `
         <div class="conformed-link-badge" style="margin-top:12px">
           <svg viewBox="0 0 16 16" fill="currentColor" style="width:13px;height:13px"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.2 5.5l-3.7 3.7a.75.75 0 01-1.06 0L4.8 8.5a.75.75 0 011.06-1.06l1.1 1.1 3.18-3.18a.75.75 0 111.06 1.06z"/></svg>
-          Conformed — ${this._esc(linked.name)}
+          Conformed — ${this._esc(linked.name)}${linkedDimCol ? ' › ' + this._esc(linkedDimCol.name) : ''}
           <a href="#dimension/${linked.id}" style="margin-left:6px;font-size:11px;font-weight:400;color:var(--info)">View template →</a>
+          <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px;margin-left:auto"
+            onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')">Sync from template</button>
         </div>` : ''}
       </div>
       <div style="font-size:11px;color:var(--text-subtle);margin-top:16px;line-height:1.6">
-        <strong>Built-in templates</strong> provide a standard structure but are read-only.
+        <strong>Built-in templates</strong> are read-only.
         Use the <a href="#dimensions" style="color:var(--info)">Dimension Library</a> to create custom dimensions or clone a built-in.
       </div>
     `;
+  },
+
+  // ── Event-level field update ──────────────────────────────
+
+  updateEventField(projectId, eventId, field, value) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    event[field] = value;
+    Storage.saveEvent(projectId, event);
+  },
+
+  // ── Conformed dimension helpers ───────────────────────────
+
+  // Select which dim column this column maps to, and auto-fill Summary fields
+  conformToColId(projectId, eventId, colId, dimColId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.publicDimensionColId = dimColId;
+    col.isConformed = !!(col.publicDimensionId && dimColId);
+    if (col.isConformed) {
+      const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+      const dim = allDims.find(d => d.id === col.publicDimensionId);
+      const dimCol = dim ? (dim.columns || []).find(c => c.id === dimColId) : null;
+      if (dimCol) {
+        col.name = dimCol.name;
+        col.dataType = dimCol.dataType || col.dataType;
+        col.description = dimCol.description || col.description;
+        col.responsibilityType = dimCol.responsibilityType || col.responsibilityType;
+      }
+    }
+    Storage.saveEvent(projectId, event);
+    const activeTab = document.querySelector('.col-detail-tab.active')?.dataset.tab || 'conformed';
+    Projects.renderEventDetail(projectId, eventId, colId, activeTab);
+  },
+
+  // Re-sync from the linked dim col (e.g. after template was updated)
+  syncFromDimTemplate(projectId, eventId, colId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col || !col.publicDimensionId || !col.publicDimensionColId) return;
+    const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+    const dim = allDims.find(d => d.id === col.publicDimensionId);
+    const dimCol = dim ? (dim.columns || []).find(c => c.id === col.publicDimensionColId) : null;
+    if (!dimCol) { showToast('Linked column no longer exists in the template', 'error'); return; }
+    col.name = dimCol.name;
+    col.dataType = dimCol.dataType || col.dataType;
+    col.description = dimCol.description || col.description;
+    col.responsibilityType = dimCol.responsibilityType || col.responsibilityType;
+    Storage.saveEvent(projectId, event);
+    showToast('Synced from template');
+    Projects.renderEventDetail(projectId, eventId, colId, 'summary');
+  },
+
+  // ── Sample Data Generator ─────────────────────────────────
+
+  generateSampleData(projectId, eventId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event || event.columns.length === 0) { showToast('No columns to generate data for', 'error'); return; }
+
+    const ROWS = 5;
+    const sample = (col, rowIdx) => {
+      const seed = rowIdx + 1;
+      const dt = col.dataType || 'VARCHAR';
+      if (col.format) {
+        // Use format hint examples — pick first token
+        const ex = col.format.split(/[,;|]/)[rowIdx % col.format.split(/[,;|]/).length];
+        if (ex && ex.trim()) return ex.trim();
+      }
+      if (dt === 'UUID') return `xxxxxxxx-${String(1000+seed).padStart(4,'0')}-4xxx-yxxx-${String(100000+seed*7).padStart(12,'0')}`.replace(/[xy]/g,c=>{const r=Math.floor(Math.random()*16);return(c==='x'?r:(r&0x3|0x8)).toString(16);});
+      if (dt === 'BOOLEAN') return seed % 3 === 0 ? 'false' : 'true';
+      if (dt === 'DATE') { const d=new Date(2024,0,seed*5+1); return d.toISOString().slice(0,10); }
+      if (dt === 'DATETIME' || dt === 'TIMESTAMP') { const d=new Date(2024,0,seed*5+1,seed%24,seed*7%60); return d.toISOString().slice(0,16).replace('T',' '); }
+      if (dt === 'INT' || dt === 'BIGINT') return String(seed * 1000 + rowIdx * 37);
+      if (dt === 'DECIMAL' || dt === 'FLOAT') return (seed * 1234.56 + rowIdx * 99.99).toFixed(2);
+      // VARCHAR — use category hints
+      const cat = col.category;
+      const names = {
+        who: ['CUST-001','CUST-002','SUPPLIER-A','EMP-0042','ORG-99'],
+        what: ['PROD-100','SKU-200A','SERVICE-FIN','MAT-300','ITEM-X'],
+        when: ['2024-01-01','2024-03-15','2024-06-30','2024-09-01','2024-12-31'],
+        where: ['CC-1000','CC-2100','PC-EMEA','BA-RETAIL','ORG-DE01'],
+        how: ['TYPE-A','DOC-STD','METHOD-1','PROCESS-2','CHANNEL-3'],
+        why: ['REASON-01','COST-CTR','PROJECT-X','WBS-100','ALLOC-01'],
+        how_many: ['0','100.00','250.00','1500.00','-99.50']
+      };
+      const arr = names[cat] || names.what;
+      return arr[seed % arr.length];
+    };
+
+    const cols = event.columns;
+    const thead = `<tr>${cols.map(c => `<th style="padding:6px 10px;text-align:left;white-space:nowrap;font-size:11px;background:#1c1c28;color:#e0e0f0">${this._esc(c.name||c.id)}</th>`).join('')}</tr>`;
+    const tbody = Array.from({length:ROWS},(_,i) =>
+      `<tr>${cols.map(c => `<td style="padding:5px 10px;font-size:12px;border-bottom:1px solid #f0f1f3;font-family:monospace">${this._esc(sample(c,i))}</td>`).join('')}</tr>`
+    ).join('');
+
+    const copyCSV = () => {
+      const header = cols.map(c => c.name||c.id).join(',');
+      const rows = Array.from({length:ROWS},(_,i) => cols.map(c => `"${sample(c,i).replace(/"/g,'""')}"`).join(','));
+      navigator.clipboard?.writeText([header,...rows].join('\n')).then(() => showToast('Copied to clipboard'));
+    };
+
+    Modal.show({
+      title: `Sample Data — ${event.name}`,
+      body: `
+        <div style="overflow-x:auto;max-height:340px;border:1px solid var(--border);border-radius:6px">
+          <table style="border-collapse:collapse;width:100%">
+            <thead>${thead}</thead><tbody>${tbody}</tbody>
+          </table>
+        </div>
+        <p style="font-size:11px;color:var(--text-subtle);margin-top:8px">
+          Illustrative values only. Dates start Jan 2024; IDs are sequential.
+        </p>`,
+      confirmLabel: 'Copy as CSV',
+      onConfirm() { copyCSV(); Modal.hide(); }
+    });
   },
 
   // ── Column field update ───────────────────────────────────
@@ -676,7 +1025,12 @@ const Projects = {
     const col = event.columns.find(c => c.id === colId);
     if (!col) return;
     col[field] = value;
-    if (field === 'publicDimensionId') col.isConformed = !!value;
+    if (field === 'publicDimensionId') {
+      col.isConformed = !!value;
+      if (!value) col.publicDimensionColId = '';
+    }
+    // Changing source triggers tab visibility changes — always refresh
+    if (field === 'source') refreshList = true;
     Storage.saveEvent(projectId, event);
     if (refreshList) {
       // Re-render to update left panel (name/category changed)
@@ -732,7 +1086,11 @@ const Projects = {
           hierarchyName: '', hierarchyLevel: null, isParentKey: false, parentColumnId: '',
           dateKeyRole: '', joinDimension: '', isFinancialAnchor: false,
           glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '',
-          format: '', mlTag: 'none', isCashBased: false
+          format: '', mlTag: 'none', isCashBased: false,
+          publicDimensionColId: '',
+          stageSource: '', stageTarget: '', transformType: '', nullHandling: '',
+          defaultValue: '', signReversal: false, unitConversion: '',
+          dataQualityRule: '', stagingNote: ''
         };
         const project = Storage.getProject(projectId);
         const event = project.events.find(e => e.id === eventId);

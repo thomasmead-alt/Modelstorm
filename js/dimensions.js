@@ -224,13 +224,19 @@ const DimensionLibrary = {
       columns: []
     };
 
-    // Store working copy
-    this._editorState = { dim };
+    // Store working copy with two-panel state
+    this._editorState = {
+      dim,
+      selectedColId: dim.columns.length > 0 ? dim.columns[0].id : null,
+      activeColTab: 'definition'
+    };
 
     const catOpts = Object.entries(CATEGORIES)
       .filter(([k]) => k !== 'how_many')
       .map(([k, c]) => `<option value="${k}" ${dim.category === k ? 'selected' : ''}>${c.label} — ${c.meaning || c.label}</option>`)
       .join('');
+
+    const colListHTML = this._dimColListHTML(dim, this._editorState.selectedColId);
 
     const app = document.getElementById('app');
     app.innerHTML = `
@@ -247,7 +253,7 @@ const DimensionLibrary = {
         </div>` : ''}
       </div>
 
-      <div class="project-meta" style="margin-bottom:20px">
+      <div class="project-meta" style="margin-bottom:16px">
         <div class="dim-editor-meta-grid">
           <div class="form-group" style="grid-column:1/3">
             <label class="form-label">Name <span class="required">*</span></label>
@@ -259,9 +265,9 @@ const DimensionLibrary = {
             <input class="form-input" id="dimIcon" value="${this._esc(dim.icon || '')}"
               placeholder="🏭" style="max-width:80px">
           </div>
-          <div class="form-group" style="grid-column:1/-1">
+          <div class="form-group">
             <label class="form-label">7W Category <span class="required">*</span></label>
-            <select class="form-input" id="dimCategory" style="max-width:400px">${catOpts}</select>
+            <select class="form-input" id="dimCategory">${catOpts}</select>
           </div>
           <div class="form-group" style="grid-column:1/-1">
             <label class="form-label">Description</label>
@@ -271,34 +277,30 @@ const DimensionLibrary = {
         </div>
       </div>
 
-      <div class="dim-editor-section">
-        <div class="dim-editor-section-header">
-          <h3>Columns (${dim.columns.length})</h3>
-          <button class="btn btn-ghost btn-sm" style="color:#e0e0f0"
-            onclick="DimensionLibrary._addEditorCol()">+ Add Column</button>
+      <div class="event-detail-layout dim-editor-two-panel">
+        <div class="col-list-panel">
+          <div class="col-list-header">
+            <span>Columns</span>
+          </div>
+          <div class="col-list-body" id="dim-col-list-body">
+            ${colListHTML}
+          </div>
+          <div style="padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0">
+            <button class="btn btn-ghost btn-sm" style="width:100%;font-size:12px"
+              onclick="DimensionLibrary._addEditorCol()">+ Add Column</button>
+          </div>
         </div>
-        <div class="dim-editor-cols-wrap">
-          <table class="dim-editor-table">
-            <thead>
-              <tr>
-                <th style="width:28px"></th>
-                <th>Column Name</th>
-                <th style="width:120px">Data Type</th>
-                <th style="width:52px;text-align:center">Key</th>
-                <th style="width:160px">Responsibility</th>
-                <th>Description</th>
-                <th style="width:80px;text-align:center" title="Hierarchy level (1 = top). Used for rollup/drill-down paths.">H.Level</th>
-                <th style="width:56px;text-align:center" title="Mark as self-referencing parent key (generates recursive FK in DDL)">Parent</th>
-                <th style="width:32px"></th>
-              </tr>
-            </thead>
-            <tbody id="dimEditorBody">
-              ${dim.columns.map(c => this._editorRow(c)).join('')}
-            </tbody>
-          </table>
-          ${dim.columns.length === 0
-            ? '<p class="dim-editor-empty">No columns yet — click <strong>+ Add Column</strong> to begin.</p>'
-            : ''}
+
+        <div class="col-detail-panel" id="dim-col-detail-panel">
+          ${this._editorState.selectedColId
+            ? (() => {
+                const col = dim.columns.find(c => c.id === this._editorState.selectedColId);
+                if (!col) return '<div class="col-detail-empty"><span>Select a column to edit</span></div>';
+                const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
+                return DimensionLibrary._dimColDetailHTML(col, isSAP, 'definition');
+              })()
+            : '<div class="col-detail-empty"><span>Select a column to edit</span></div>'
+          }
         </div>
       </div>
 
@@ -311,6 +313,176 @@ const DimensionLibrary = {
         <a href="${isNew ? '#dimensions' : '#dimension/' + dim.id}" class="btn btn-ghost">Cancel</a>
       </div>
     `;
+  },
+
+  // ── Two-panel helpers ─────────────────────────────────────
+
+  _dimColListHTML(dim, selectedColId) {
+    if (dim.columns.length === 0) {
+      return '<div class="col-list-empty">No columns yet.<br>Click <strong>+ Add Column</strong> to begin.</div>';
+    }
+    return dim.columns.map(col => {
+      const isActive = col.id === selectedColId;
+      return `
+        <div class="col-list-item${isActive ? ' active' : ''}" data-col-id="${col.id}"
+          onclick="DimensionLibrary.selectDimCol('${col.id}')">
+          <div class="col-cat-dot" style="background:#6b7280"></div>
+          ${col.isKey ? '<span style="font-size:9px;font-weight:700;background:#f59e0b;color:#fff;padding:1px 4px;border-radius:3px;flex-shrink:0">PK</span>' : ''}
+          <span class="col-item-name" title="${this._esc(col.name)}">${this._esc(col.name) || '<em style="color:var(--text-subtle)">unnamed</em>'}</span>
+          <span class="col-item-type">${this._esc(col.dataType || 'VARCHAR')}</span>
+        </div>`;
+    }).join('');
+  },
+
+  selectDimCol(colId) {
+    if (!this._editorState) return;
+    this._editorState.selectedColId = colId;
+    this._renderDimColDetail();
+  },
+
+  selectDimColTab(tab) {
+    if (!this._editorState) return;
+    this._editorState.activeColTab = tab;
+    this._renderDimColDetail();
+  },
+
+  _renderDimColDetail() {
+    const panel = document.getElementById('dim-col-detail-panel');
+    const listBody = document.getElementById('dim-col-list-body');
+    if (!panel || !this._editorState) return;
+
+    const { dim, selectedColId, activeColTab } = this._editorState;
+
+    // Update active state in list
+    if (listBody) {
+      listBody.querySelectorAll('.col-list-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.colId === selectedColId);
+      });
+    }
+
+    const col = dim.columns.find(c => c.id === selectedColId);
+    if (!col) {
+      panel.innerHTML = '<div class="col-detail-empty"><span>Select a column to edit</span></div>';
+      return;
+    }
+
+    const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
+    panel.innerHTML = DimensionLibrary._dimColDetailHTML(col, isSAP, activeColTab || 'definition');
+  },
+
+  _dimColDetailHTML(col, isSAP, tab) {
+    const cId = col.id;
+    const tabs = [
+      { id: 'definition', label: 'Definition' },
+      { id: 'sap',        label: 'SAP Alignment' }
+    ];
+    const tabButtons = tabs.map(t =>
+      `<button class="col-detail-tab${tab === t.id ? ' active' : ''}" data-tab="${t.id}"
+        onclick="DimensionLibrary.selectDimColTab('${t.id}')">${t.label}</button>`
+    ).join('');
+
+    let body = '';
+    if (tab === 'definition') {
+      const typeOpts = ['VARCHAR','INT','BIGINT','DECIMAL','FLOAT','DATE','DATETIME','BOOLEAN','TEXT','UUID']
+        .map(t => `<option value="${t}" ${col.dataType === t ? 'selected' : ''}>${t}</option>`).join('');
+      const srcOpts = Object.entries(typeof SOURCES !== 'undefined' ? SOURCES : {})
+        .map(([k, s]) => `<option value="${k}" ${(col.source || '') === k ? 'selected' : ''}>${s.label}</option>`).join('');
+      const rtOpts = Object.entries(typeof RESPONSIBILITY_TYPES !== 'undefined' ? RESPONSIBILITY_TYPES : {})
+        .map(([k, r]) => `<option value="${k}" ${(col.responsibilityType || 'none') === k ? 'selected' : ''}>${r.label}</option>`).join('');
+
+      body = `
+        <div class="cd-section">
+          <div class="cd-section-title">Identity</div>
+          <div class="cd-grid g2">
+            <div class="cd-field" style="grid-column:1/-1">
+              <label>Column Name</label>
+              <input type="text" value="${this._esc(col.name)}" placeholder="column_name"
+                onchange="DimensionLibrary._updateEditorCol('${cId}','name',this.value)">
+            </div>
+            <div class="cd-field">
+              <label>Data Type</label>
+              <select onchange="DimensionLibrary._updateEditorCol('${cId}','dataType',this.value)">${typeOpts}</select>
+            </div>
+            <div class="cd-field">
+              <label>Origin / Source</label>
+              <select onchange="DimensionLibrary._updateEditorCol('${cId}','source',this.value)">${srcOpts}</select>
+            </div>
+            <div class="cd-field" style="grid-column:1/-1">
+              <label>Description</label>
+              <textarea placeholder="What this column represents…"
+                onchange="DimensionLibrary._updateEditorCol('${cId}','description',this.value)">${this._esc(col.description || '')}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="cd-section">
+          <div class="cd-section-title">Classification</div>
+          <div class="cd-grid g2">
+            <div class="cd-field">
+              <label>Responsibility Type</label>
+              <select onchange="DimensionLibrary._updateEditorCol('${cId}','responsibilityType',this.value)">${rtOpts}</select>
+            </div>
+            <div class="cd-field">
+              <label>Hierarchy Level <span style="font-weight:400;color:var(--text-subtle)">(1 = top)</span></label>
+              <input type="number" min="1" max="10" value="${col.hierarchyLevel != null ? col.hierarchyLevel : ''}" placeholder="—"
+                onchange="DimensionLibrary._updateEditorCol('${cId}','hierarchyLevel',this.value ? parseInt(this.value) : null)">
+            </div>
+          </div>
+          <div class="cd-toggle" style="margin-top:8px">
+            <input type="checkbox" id="isKey-${cId}" ${col.isKey ? 'checked' : ''}
+              onchange="DimensionLibrary._updateEditorCol('${cId}','isKey',this.checked)">
+            <label for="isKey-${cId}">Is primary / surrogate key (PK)</label>
+          </div>
+          <div class="cd-toggle">
+            <input type="checkbox" id="isParentKey-${cId}" ${col.isParentKey ? 'checked' : ''}
+              onchange="DimensionLibrary._updateEditorCol('${cId}','isParentKey',this.checked)">
+            <label for="isParentKey-${cId}">Is parent key (self-referencing hierarchy)</label>
+          </div>
+        </div>
+        <div style="padding-top:4px">
+          <button class="btn btn-ghost btn-sm" style="color:#ef4444;font-size:12px"
+            onclick="DimensionLibrary._deleteEditorCol('${cId}')">Remove column</button>
+        </div>`;
+    } else {
+      // SAP Alignment tab
+      if (!isSAP) {
+        body = `<div class="col-detail-empty" style="padding:32px 24px;text-align:center;color:var(--text-muted);font-size:13px">
+          Select <strong>SAP ECC</strong> or <strong>SAP S/4HANA</strong> as the Origin on the Definition tab to unlock SAP alignment fields.
+        </div>`;
+      } else {
+        const gapOpts = Object.entries(typeof FIELD_GAP_STATUSES !== 'undefined' ? FIELD_GAP_STATUSES : {})
+          .map(([k, s]) => `<option value="${k}" ${(col.fieldGapStatus || '') === k ? 'selected' : ''}>${s.label}</option>`).join('');
+        body = `
+          <div class="cd-section">
+            <div class="cd-section-title">SAP Field Mapping</div>
+            <div class="cd-grid g2">
+              <div class="cd-field">
+                <label>SAP Existing Field</label>
+                <input type="text" value="${this._esc(col.sapExistingField || '')}" placeholder="e.g. KUNNR"
+                  style="font-family:monospace"
+                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapExistingField',this.value)">
+              </div>
+              <div class="cd-field">
+                <label>SAP Target Field <span style="font-weight:400;color:var(--text-subtle)">(S/4)</span></label>
+                <input type="text" value="${this._esc(col.sapTargetField || '')}" placeholder="e.g. PARTNER"
+                  style="font-family:monospace"
+                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapTargetField',this.value)">
+              </div>
+              <div class="cd-field">
+                <label>SAP BW Object</label>
+                <input type="text" value="${this._esc(col.sapBwObject || '')}" placeholder="e.g. 0CUSTOMER"
+                  style="font-family:monospace"
+                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapBwObject',this.value)">
+              </div>
+              <div class="cd-field">
+                <label>Field Gap Status</label>
+                <select onchange="DimensionLibrary._updateEditorCol('${cId}','fieldGapStatus',this.value)">${gapOpts}</select>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
+
+    return `<div class="col-detail-tabs">${tabButtons}</div><div class="col-detail-body">${body}</div>`;
   },
 
   // ── Column editor helpers ─────────────────────────────────
@@ -360,6 +532,7 @@ const DimensionLibrary = {
       name: '',
       dataType: 'VARCHAR',
       isKey: false,
+      source: 'source_system',
       responsibilityType: 'none',
       description: '',
       hierarchyLevel: null,
@@ -372,31 +545,15 @@ const DimensionLibrary = {
       fieldGapStatus: ''
     };
     this._editorState.dim.columns.push(col);
-    const tbody = document.getElementById('dimEditorBody');
-    if (tbody) {
-      tbody.insertAdjacentHTML('beforeend', this._editorRow(col));
-      const empty = document.querySelector('.dim-editor-empty');
-      if (empty) empty.remove();
+
+    // Update left panel list
+    const listBody = document.getElementById('dim-col-list-body');
+    if (listBody) {
+      listBody.innerHTML = this._dimColListHTML(this._editorState.dim, col.id);
     }
-    // Also add a row to the SAP field mapping table
-    const sapBody = document.getElementById('dimSapFieldBody');
-    if (sapBody) {
-      // Remove the "add columns first" placeholder if present
-      const placeholder = sapBody.querySelector('td[colspan="5"]');
-      if (placeholder) placeholder.closest('tr').remove();
-      const gapOpts = Object.entries(typeof FIELD_GAP_STATUSES !== 'undefined' ? FIELD_GAP_STATUSES : {})
-        .map(([k, s]) => `<option value="${k}">${s.label}</option>`).join('');
-      sapBody.insertAdjacentHTML('beforeend', `<tr id="sap-row-${col.id}">
-        <td><code style="font-size:12px">${this._esc(col.name || '(unnamed)')}</code><div style="font-size:10px;color:var(--text-subtle)">${col.dataType}</div></td>
-        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. KUNNR" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapExistingField',this.value)"></td>
-        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. PARTNER" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapTargetField',this.value)"></td>
-        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. 0CUSTOMER" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapBwObject',this.value)"></td>
-        <td><select class="cell-select" style="font-size:11px;width:100%" onchange="DimensionLibrary._updateEditorCol('${col.id}','fieldGapStatus',this.value)">${gapOpts}</select></td>
-      </tr>`);
-    }
-    // Update column count in header
-    const hdr = document.querySelector('.dim-editor-section-header h3');
-    if (hdr) hdr.textContent = `Columns (${this._editorState.dim.columns.length})`;
+
+    // Auto-select the new column in the right panel
+    this.selectDimCol(col.id);
   },
 
   _updateEditorCol(colId, field, value) {
@@ -408,20 +565,22 @@ const DimensionLibrary = {
   _deleteEditorCol(colId) {
     if (!this._editorState) return;
     this._editorState.dim.columns = this._editorState.dim.columns.filter(c => c.id !== colId);
-    const row = document.querySelector(`tr[data-col-id="${colId}"]`);
-    if (row) row.remove();
-    // Also remove from SAP field mapping table
-    const sapRow = document.getElementById(`sap-row-${colId}`);
-    if (sapRow) sapRow.remove();
-    // Update column count
-    const hdr = document.querySelector('.dim-editor-section-header h3');
-    if (hdr) hdr.textContent = `Columns (${this._editorState.dim.columns.length})`;
-    if (this._editorState.dim.columns.length === 0) {
-      const wrap = document.querySelector('.dim-editor-cols-wrap');
-      if (wrap && !wrap.querySelector('.dim-editor-empty')) {
-        wrap.insertAdjacentHTML('beforeend', '<p class="dim-editor-empty">No columns yet — click <strong>+ Add Column</strong> to begin.</p>');
-      }
+
+    // If the deleted column was selected, clear selection or pick the first remaining
+    if (this._editorState.selectedColId === colId) {
+      this._editorState.selectedColId = this._editorState.dim.columns.length > 0
+        ? this._editorState.dim.columns[0].id
+        : null;
     }
+
+    // Update the left panel list
+    const listBody = document.getElementById('dim-col-list-body');
+    if (listBody) {
+      listBody.innerHTML = this._dimColListHTML(this._editorState.dim, this._editorState.selectedColId);
+    }
+
+    // Re-render the right panel
+    this._renderDimColDetail();
   },
 
   // ── SAP Alignment section (editor) ───────────────────

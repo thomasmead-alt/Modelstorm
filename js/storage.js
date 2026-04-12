@@ -58,6 +58,8 @@ const Storage = {
       if (!e.glMappings)    e.glMappings    = [];
       // Phase 5: SAP subledger linkage
       if (!e.subledgers)    e.subledgers    = [];
+      // Phase 6: event-level notes / KPI context
+      if (!e.notes) e.notes = '';
 
       e.columns = (e.columns || []).map(col => {
         // Phase 2: additivity, budget, responsibility, conformed dims
@@ -99,6 +101,18 @@ const Storage = {
         if (!col.parentColumnId)  col.parentColumnId  = '';
         // Phase 6: per-column SAP module (replaces event-level subledger)
         if (!col.sapModule) col.sapModule = '';
+        // Phase 6: conformed dimension column reference
+        if (!col.publicDimensionColId) col.publicDimensionColId = '';
+        // Phase 6: stage / ETL mapping fields
+        if (!col.stageSource)     col.stageSource     = '';
+        if (!col.stageTarget)     col.stageTarget     = '';
+        if (!col.transformType)   col.transformType   = '';
+        if (!col.nullHandling)    col.nullHandling    = '';
+        if (!col.defaultValue)    col.defaultValue    = '';
+        if (!col.signReversal)    col.signReversal    = false;
+        if (!col.unitConversion)  col.unitConversion  = '';
+        if (!col.dataQualityRule) col.dataQualityRule = '';
+        if (!col.stagingNote)     col.stagingNote     = '';
         return col;
       });
       return e;
