@@ -224,13 +224,23 @@ const Projects = {
 
     const grain = event.grain || 'transaction';
     const grainInfo = (typeof GRAINS !== 'undefined' && GRAINS[grain]) || { label: grain, color: '#6b7280' };
-    const grainBadge = `<span class="grain-badge" style="background:${grainInfo.color}18;color:${grainInfo.color};border:1px solid ${grainInfo.color}40">${this._esc(grainInfo.label)}</span>`;
+    const grainOpts = typeof GRAINS !== 'undefined'
+      ? Object.entries(GRAINS).map(([k, g]) => `<option value="${k}" ${grain === k ? 'selected' : ''}>${g.label}</option>`).join('')
+      : `<option value="${grain}">${grain}</option>`;
+    const grainSelect = `<select class="event-meta-select"
+      style="background:${grainInfo.color}18;color:${grainInfo.color};border:1px solid ${grainInfo.color}40"
+      title="Grain — edit event grain"
+      onchange="Projects.updateEventField('${projectId}','${eventId}','grain',this.value);Projects.renderEventDetail('${projectId}','${eventId}',null,null)">${grainOpts}</select>`;
 
     const purpose = event.eventPurpose || 'actuals';
     const purposeInfo = typeof EVENT_PURPOSES !== 'undefined' ? (EVENT_PURPOSES[purpose] || {}) : {};
-    const purposeBadge = purposeInfo.label
-      ? `<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${purposeInfo.bg||'#f3f4f6'};color:${purposeInfo.color||'#6b7280'}">${purposeInfo.short || purposeInfo.label}</span>`
-      : '';
+    const purposeOpts = typeof EVENT_PURPOSES !== 'undefined'
+      ? Object.entries(EVENT_PURPOSES).map(([k, p]) => `<option value="${k}" ${purpose === k ? 'selected' : ''}>${p.label}</option>`).join('')
+      : `<option value="${purpose}">${purpose}</option>`;
+    const purposeSelect = `<select class="event-meta-select"
+      style="background:${purposeInfo.bg||'#f3f4f6'};color:${purposeInfo.color||'#6b7280'};border:1px solid ${purposeInfo.color||'#6b7280'}40"
+      title="Purpose — edit event purpose"
+      onchange="Projects.updateEventField('${projectId}','${eventId}','eventPurpose',this.value);Projects.renderEventDetail('${projectId}','${eventId}',null,null)">${purposeOpts}</select>`;
 
     const completeness = this._completenessStats(event);
 
@@ -255,8 +265,8 @@ const Projects = {
 
       <div class="event-detail-wrap">
         <div class="event-detail-meta">
-          ${grainBadge}
-          ${purposeBadge}
+          ${grainSelect}
+          ${purposeSelect}
           ${event.description ? `<span class="event-meta-desc">${this._esc(event.description)}</span>` : ''}
           <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0">
             <div class="event-completeness-wrap" title="${completeness.filled}/${completeness.total} 7W categories covered">
@@ -335,9 +345,12 @@ const Projects = {
 
   _colListItem(col, selectedColId, projectId, eventId, tab) {
     const cat = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { color: '#6b7280' };
-    const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
-    const srcBadge = isSAP
-      ? `<span style="font-size:9px;font-weight:700;color:${col.source === 'sap_s4' ? '#065f46' : '#1b6ca8'};margin-left:2px">SAP</span>`
+    // Source badge — show for all non-default origins
+    const SRC_SHORT = { source_system: null, derived: 'DER', lookup: 'LKP', sap_ecc: 'ECC', sap_s4: 'S/4' };
+    const srcShort = SRC_SHORT[col.source];
+    const srcDef = srcShort && typeof SOURCES !== 'undefined' ? (SOURCES[col.source] || null) : null;
+    const srcBadge = srcDef
+      ? `<span class="col-src-badge" title="${srcDef.label}" style="color:${srcDef.color};background:${srcDef.bg}">${srcShort}</span>`
       : '';
     const isActive = col.id === selectedColId;
     // Make sure selected tab is valid for this col when switching
@@ -1049,49 +1062,127 @@ const Projects = {
       : '';
     const dtOpts = ['VARCHAR','INT','DECIMAL','DATE','DATETIME','BOOLEAN','UUID']
       .map(t => `<option value="${t}">${t}</option>`).join('');
+    const srcOpts = typeof SOURCES !== 'undefined'
+      ? Object.entries(SOURCES).map(([k, s]) =>
+          `<option value="${k}">${s.label}</option>`).join('')
+      : '<option value="source_system">Source System</option>';
+
+    const allDims = typeof Storage.getAllDimTemplates === 'function'
+      ? Storage.getAllDimTemplates()
+      : (typeof DEFAULT_PUBLIC_DIMENSIONS !== 'undefined' ? DEFAULT_PUBLIC_DIMENSIONS : []);
+    const dimOpts = allDims.map(d =>
+      `<option value="${d.id}">${d.isCustom ? '★ ' : ''}${d.name}</option>`).join('');
+
     Modal.show({
       title: 'Add Column',
       body: `
-        <div class="form-group">
-          <label class="form-label" for="colName">Column name <span class="required">*</span></label>
-          <input class="form-input" id="colName" type="text" placeholder="e.g. customer_id" autofocus maxlength="80">
+        <div class="add-col-mode-strip">
+          <label class="add-col-mode-btn active" id="modeNewLbl">
+            <input type="radio" name="addColMode" value="new" checked
+              onchange="document.getElementById('addColNewSec').style.display='';document.getElementById('addColTplSec').style.display='none';document.getElementById('modeNewLbl').classList.add('active');document.getElementById('modeTplLbl').classList.remove('active')">
+            New Column
+          </label>
+          <label class="add-col-mode-btn" id="modeTplLbl">
+            <input type="radio" name="addColMode" value="template"
+              onchange="document.getElementById('addColNewSec').style.display='none';document.getElementById('addColTplSec').style.display='';document.getElementById('modeTplLbl').classList.add('active');document.getElementById('modeNewLbl').classList.remove('active');document.getElementById('colName').removeAttribute('required')">
+            From Dimension Template
+          </label>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="colCat">7W Category</label>
-          <select class="form-input" id="colCat">${catOpts}</select>
+
+        <div id="addColNewSec">
+          <div class="form-group">
+            <label class="form-label" for="colName">Column name <span class="required">*</span></label>
+            <input class="form-input" id="colName" type="text" placeholder="e.g. customer_id" autofocus maxlength="80">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="colCat">7W Category</label>
+            <select class="form-input" id="colCat">${catOpts}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="colType">Data Type</label>
+            <select class="form-input" id="colType">${dtOpts}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="colSource">Source / Origin</label>
+            <select class="form-input" id="colSource" onchange="Projects._onSourceHintChange(this.value)">${srcOpts}</select>
+            <div id="colSourceHint" class="src-origin-hint" style="margin-top:5px"></div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="colType">Data Type</label>
-          <select class="form-input" id="colType">${dtOpts}</select>
+
+        <div id="addColTplSec" style="display:none">
+          <div class="form-group">
+            <label class="form-label" for="colDimId">Dimension Template</label>
+            <select class="form-input" id="colDimId" onchange="Projects._onDimTemplateChange(this.value)">
+              <option value="">— Choose a template —</option>
+              ${dimOpts}
+            </select>
+          </div>
+          <div class="form-group" id="colDimColGroup" style="display:none">
+            <label class="form-label" for="colDimColId">Column from template</label>
+            <select class="form-input" id="colDimColId">
+              <option value="">— Choose a column —</option>
+            </select>
+          </div>
+          <p id="colDimPreview" style="font-size:12px;color:var(--text-muted);margin:0"></p>
         </div>
       `,
       confirmLabel: 'Add Column',
       onConfirm() {
-        const name = document.getElementById('colName')?.value.trim();
-        if (!name) { Modal.shake(); return; }
-        const col = {
+        const mode = document.querySelector('input[name="addColMode"]:checked')?.value || 'new';
+        let col;
+        const base = {
           id: Storage.generateId(),
-          name,
-          category: document.getElementById('colCat')?.value || 'who',
-          dataType: document.getElementById('colType')?.value || 'VARCHAR',
           source: 'source_system',
           description: '', notes: '', formula: '',
           additiveType: 'fully_additive', budgetControl: false,
           responsibilityType: 'none', scdType: null,
           isNaturalKey: false, isSurrogateKey: false,
           plLineId: '', ownerId: '', cashFlowLineId: '',
-          publicDimensionId: '', isConformed: false,
+          publicDimensionId: '', isConformed: false, publicDimensionColId: '',
           sapTable: '', sapField: '', sapMigrationStatus: '', sapModule: '',
           copaCharacteristic: '', copaValueField: '',
           hierarchyName: '', hierarchyLevel: null, isParentKey: false, parentColumnId: '',
           dateKeyRole: '', joinDimension: '', isFinancialAnchor: false,
           glAccount: '', glAccountRangeFrom: '', glAccountRangeTo: '',
           format: '', mlTag: 'none', isCashBased: false,
-          publicDimensionColId: '',
           stageSource: '', stageTarget: '', transformType: '', nullHandling: '',
           defaultValue: '', signReversal: false, unitConversion: '',
           dataQualityRule: '', stagingNote: ''
         };
+
+        if (mode === 'template') {
+          const dimId  = document.getElementById('colDimId')?.value;
+          const dimColId = document.getElementById('colDimColId')?.value;
+          if (!dimId || !dimColId) { Modal.shake(); return; }
+          const allDims2 = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+          const dim = allDims2.find(d => d.id === dimId);
+          const dimCol = dim ? (dim.columns || []).find(c => c.id === dimColId) : null;
+          if (!dim || !dimCol) { Modal.shake(); return; }
+          col = {
+            ...base,
+            name: dimCol.name,
+            category: dim.category || 'who',
+            dataType: dimCol.dataType || 'VARCHAR',
+            description: dimCol.description || '',
+            responsibilityType: dimCol.responsibilityType || 'none',
+            hierarchyLevel: dimCol.hierarchyLevel || null,
+            isParentKey: dimCol.isParentKey || false,
+            publicDimensionId: dimId,
+            publicDimensionColId: dimColId,
+            isConformed: true
+          };
+        } else {
+          const name = document.getElementById('colName')?.value.trim();
+          if (!name) { Modal.shake(); return; }
+          col = {
+            ...base,
+            name,
+            category: document.getElementById('colCat')?.value || 'who',
+            dataType: document.getElementById('colType')?.value || 'VARCHAR',
+            source: document.getElementById('colSource')?.value || 'source_system',
+          };
+        }
+
         const project = Storage.getProject(projectId);
         const event = project.events.find(e => e.id === eventId);
         if (!event) return;
@@ -1101,6 +1192,39 @@ const Projects = {
         Projects.renderEventDetail(projectId, eventId, col.id, 'summary');
       }
     });
+  },
+
+  // Called when user picks a dimension template in the add-column modal
+  _onDimTemplateChange(dimId) {
+    const colGroup = document.getElementById('colDimColGroup');
+    const colSel   = document.getElementById('colDimColId');
+    const preview  = document.getElementById('colDimPreview');
+    if (!dimId) { if (colGroup) colGroup.style.display = 'none'; return; }
+    const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+    const dim = allDims.find(d => d.id === dimId);
+    if (!dim || !colSel) return;
+    colSel.innerHTML = '<option value="">— Choose a column —</option>'
+      + (dim.columns || []).map(c =>
+          `<option value="${c.id}">${c.isKey ? '🔑 ' : ''}${c.name} (${c.dataType})</option>`
+        ).join('');
+    colSel.onchange = () => {
+      const c = (dim.columns || []).find(x => x.id === colSel.value);
+      if (preview) preview.textContent = c ? (c.description || '') : '';
+    };
+    if (colGroup) colGroup.style.display = '';
+  },
+
+  // Called when origin select changes in Add Column modal
+  _onSourceHintChange(srcKey) {
+    const hint = document.getElementById('colSourceHint');
+    if (!hint) return;
+    const src = typeof SOURCES !== 'undefined' && srcKey ? SOURCES[srcKey] : null;
+    if (src && src.description) {
+      hint.innerHTML = `<span style="color:${src.color}">${this._esc(src.description)}</span>`
+        + (src.formatHint ? `<br><em style="color:var(--text-subtle);font-size:10px">${this._esc(src.formatHint)}</em>` : '');
+    } else {
+      hint.innerHTML = '';
+    }
   },
 
   // ── Modals ────────────────────────────────────────────────

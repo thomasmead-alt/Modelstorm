@@ -123,6 +123,7 @@ const Storage = {
   _migrate(data) {
     // Root-level new fields
     if (!data.customDimensions) data.customDimensions = [];
+    if (!data.hierarchies) data.hierarchies = [];
 
     data.projects = (data.projects || []).map(p => this._migrateProject(p));
     return data;
@@ -372,6 +373,38 @@ const Storage = {
         }
       })
     ));
+    this.save(data);
+  },
+
+  // ── Hierarchy helpers ─────────────────────────────────────
+
+  getHierarchies(dimId) {
+    const data = this.load();
+    const all = data.hierarchies || [];
+    return dimId ? all.filter(h => h.dimId === dimId) : all;
+  },
+
+  saveHierarchy(h) {
+    const data = this.load();
+    if (!data.hierarchies) data.hierarchies = [];
+    const idx = data.hierarchies.findIndex(x => x.id === h.id);
+    if (idx >= 0) data.hierarchies[idx] = h;
+    else data.hierarchies.push(h);
+    this.save(data);
+  },
+
+  saveHierarchyField(hId, field, value) {
+    const data = this.load();
+    if (!data.hierarchies) return;
+    const h = data.hierarchies.find(x => x.id === hId);
+    if (!h) return;
+    h[field] = value;
+    this.save(data);
+  },
+
+  deleteHierarchy(hId) {
+    const data = this.load();
+    data.hierarchies = (data.hierarchies || []).filter(h => h.id !== hId);
     this.save(data);
   },
 

@@ -2158,3 +2158,28 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 
 /* Dimension editor two-panel */
 .dim-editor-two-panel { display:grid; grid-template-columns:240px 1fr; gap:0; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; min-height:380px; margin-bottom:20px; background:var(--surface); }
+
+/* ── Source/origin badge in column list ── */
+.col-src-badge { display:inline-flex; align-items:center; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+
+/* ── Editable event meta selects (grain / purpose) ── */
+.event-meta-select {
+  appearance: none; -webkit-appearance: none;
+  padding: 2px 22px 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 4px center;
+  transition: opacity 150ms;
+}
+.event-meta-select:hover { opacity: .85; }
+.event-meta-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(74,108,247,.25); }
+
+/* ── Hierarchy Library & Editor ── */
+.hier-type-badge { display:inline-flex; align-items:center; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; white-space:nowrap; }
+.hier-count-badge { display:inline-block; margin-top:8px; padding:3px 12px; border:1px solid var(--border); border-radius:12px; font-size:11px; color:var(--text-muted); background:#fafbfc; }
+.hier-count-badge-active { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+.hier-levels-table { border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.hier-levels-head { display:flex; align-items:center; gap:8px; padding:7px 12px; background:#f9fafb; border-bottom:1px solid var(--border); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+.hier-level-row { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid #f3f4f6; }
+.hier-level-row:last-child { border-bottom:none; }
+.hier-level-row:hover { background:#f8f9ff; }

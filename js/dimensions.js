@@ -372,45 +372,72 @@ const DimensionLibrary = {
 
   _dimColDetailHTML(col, isSAP, tab) {
     const cId = col.id;
+    // Same tab set as event detail view (no Conformed — dims ARE the templates)
     const tabs = [
-      { id: 'definition', label: 'Definition' },
-      { id: 'sap',        label: 'SAP Alignment' }
-    ];
+      { id: 'summary',   label: 'Summary',     show: true },
+      { id: 'technical', label: 'SAP Tech',     show: isSAP },
+      { id: 'hierarchy', label: 'Hierarchy',    show: true },
+      { id: 'stage',     label: 'Stage Mapping',show: true },
+      { id: 'notes',     label: 'Notes',        show: true },
+    ].filter(t => t.show);
+
+    // Ensure active tab is valid
+    if (!tabs.find(t => t.id === tab)) tab = 'summary';
+
     const tabButtons = tabs.map(t =>
       `<button class="col-detail-tab${tab === t.id ? ' active' : ''}" data-tab="${t.id}"
         onclick="DimensionLibrary.selectDimColTab('${t.id}')">${t.label}</button>`
     ).join('');
 
-    let body = '';
-    if (tab === 'definition') {
-      const typeOpts = ['VARCHAR','INT','BIGINT','DECIMAL','FLOAT','DATE','DATETIME','BOOLEAN','TEXT','UUID']
-        .map(t => `<option value="${t}" ${col.dataType === t ? 'selected' : ''}>${t}</option>`).join('');
-      const srcOpts = Object.entries(typeof SOURCES !== 'undefined' ? SOURCES : {})
-        .map(([k, s]) => `<option value="${k}" ${(col.source || '') === k ? 'selected' : ''}>${s.label}</option>`).join('');
-      const rtOpts = Object.entries(typeof RESPONSIBILITY_TYPES !== 'undefined' ? RESPONSIBILITY_TYPES : {})
-        .map(([k, r]) => `<option value="${k}" ${(col.responsibilityType || 'none') === k ? 'selected' : ''}>${r.label}</option>`).join('');
+    // ── helpers ──
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const up  = (f,v) => `DimensionLibrary._updateEditorCol('${cId}','${f}',${v})`;
+    const upStr = f => `onchange="DimensionLibrary._updateEditorCol('${cId}','${f}',this.value)"`;
+    const upChk = f => `onchange="DimensionLibrary._updateEditorCol('${cId}','${f}',this.checked)"`;
 
+    // ── options ──
+    const typeOpts = ['VARCHAR','INT','BIGINT','DECIMAL','FLOAT','DATE','DATETIME','TIMESTAMP','BOOLEAN','UUID','JSON','TEXT']
+      .map(t => `<option value="${t}" ${col.dataType===t?'selected':''}>${t}</option>`).join('');
+    const srcOpts  = Object.entries(typeof SOURCES!=='undefined'?SOURCES:{})
+      .map(([k,s]) => `<option value="${k}" ${(col.source||'source_system')===k?'selected':''}>${s.label}</option>`).join('');
+    const rtOpts   = Object.entries(typeof RESPONSIBILITY_TYPES!=='undefined'?RESPONSIBILITY_TYPES:{})
+      .map(([k,r]) => `<option value="${k}" ${(col.responsibilityType||'none')===k?'selected':''}>${r.label}</option>`).join('');
+    const scdOpts  = `<option value="" ${!col.scdType&&col.scdType!==0?'selected':''}>None</option>`
+      + [0,1,2,3,4,6].map(n=>`<option value="${n}" ${col.scdType===n?'selected':''}>SCD${n}</option>`).join('');
+    const srcInfo  = typeof SOURCES!=='undefined'&&col.source ? (SOURCES[col.source]||SOURCES.source_system) : null;
+
+    let body = '';
+
+    if (tab === 'summary') {
       body = `
+        <div class="cd-section">
+          <div class="cd-section-title">Origin</div>
+          <div class="cd-grid g1">
+            <div class="cd-field">
+              <label>Source / Origin</label>
+              <select onchange="DimensionLibrary._updateEditorCol('${cId}','source',this.value);DimensionLibrary._renderDimColDetail()">${srcOpts}</select>
+              ${srcInfo ? `<span class="src-origin-hint">${esc(srcInfo.description||'')}</span>` : ''}
+            </div>
+          </div>
+        </div>
         <div class="cd-section">
           <div class="cd-section-title">Identity</div>
           <div class="cd-grid g2">
             <div class="cd-field" style="grid-column:1/-1">
               <label>Column Name</label>
-              <input type="text" value="${this._esc(col.name)}" placeholder="column_name"
-                onchange="DimensionLibrary._updateEditorCol('${cId}','name',this.value)">
+              <input type="text" value="${esc(col.name)}" placeholder="column_name" ${upStr('name')}>
             </div>
             <div class="cd-field">
               <label>Data Type</label>
-              <select onchange="DimensionLibrary._updateEditorCol('${cId}','dataType',this.value)">${typeOpts}</select>
+              <select ${upStr('dataType')}>${typeOpts}</select>
             </div>
             <div class="cd-field">
-              <label>Origin / Source</label>
-              <select onchange="DimensionLibrary._updateEditorCol('${cId}','source',this.value)">${srcOpts}</select>
+              <label>Format / Examples</label>
+              <input type="text" value="${esc(col.format||'')}" placeholder="e.g. YYYY-MM-DD" ${upStr('format')}>
             </div>
             <div class="cd-field" style="grid-column:1/-1">
               <label>Description</label>
-              <textarea placeholder="What this column represents…"
-                onchange="DimensionLibrary._updateEditorCol('${cId}','description',this.value)">${this._esc(col.description || '')}</textarea>
+              <textarea placeholder="What this column represents…" ${upStr('description')}>${esc(col.description||'')}</textarea>
             </div>
           </div>
         </div>
@@ -419,67 +446,159 @@ const DimensionLibrary = {
           <div class="cd-grid g2">
             <div class="cd-field">
               <label>Responsibility Type</label>
-              <select onchange="DimensionLibrary._updateEditorCol('${cId}','responsibilityType',this.value)">${rtOpts}</select>
+              <select ${upStr('responsibilityType')}>${rtOpts}</select>
             </div>
             <div class="cd-field">
-              <label>Hierarchy Level <span style="font-weight:400;color:var(--text-subtle)">(1 = top)</span></label>
-              <input type="number" min="1" max="10" value="${col.hierarchyLevel != null ? col.hierarchyLevel : ''}" placeholder="—"
-                onchange="DimensionLibrary._updateEditorCol('${cId}','hierarchyLevel',this.value ? parseInt(this.value) : null)">
+              <label>SCD Type</label>
+              <select onchange="DimensionLibrary._updateEditorCol('${cId}','scdType',this.value===''?null:parseInt(this.value))">${scdOpts}</select>
             </div>
           </div>
           <div class="cd-toggle" style="margin-top:8px">
-            <input type="checkbox" id="isKey-${cId}" ${col.isKey ? 'checked' : ''}
-              onchange="DimensionLibrary._updateEditorCol('${cId}','isKey',this.checked)">
+            <input type="checkbox" id="isKey-${cId}" ${col.isKey?'checked':''} ${upChk('isKey')}>
             <label for="isKey-${cId}">Is primary / surrogate key (PK)</label>
           </div>
           <div class="cd-toggle">
-            <input type="checkbox" id="isParentKey-${cId}" ${col.isParentKey ? 'checked' : ''}
-              onchange="DimensionLibrary._updateEditorCol('${cId}','isParentKey',this.checked)">
-            <label for="isParentKey-${cId}">Is parent key (self-referencing hierarchy)</label>
+            <input type="checkbox" id="isNK-${cId}" ${col.isNaturalKey?'checked':''} ${upChk('isNaturalKey')}>
+            <label for="isNK-${cId}">Natural Key</label>
           </div>
         </div>
         <div style="padding-top:4px">
           <button class="btn btn-ghost btn-sm" style="color:#ef4444;font-size:12px"
             onclick="DimensionLibrary._deleteEditorCol('${cId}')">Remove column</button>
         </div>`;
-    } else {
-      // SAP Alignment tab
-      if (!isSAP) {
-        body = `<div class="col-detail-empty" style="padding:32px 24px;text-align:center;color:var(--text-muted);font-size:13px">
-          Select <strong>SAP ECC</strong> or <strong>SAP S/4HANA</strong> as the Origin on the Definition tab to unlock SAP alignment fields.
-        </div>`;
-      } else {
-        const gapOpts = Object.entries(typeof FIELD_GAP_STATUSES !== 'undefined' ? FIELD_GAP_STATUSES : {})
-          .map(([k, s]) => `<option value="${k}" ${(col.fieldGapStatus || '') === k ? 'selected' : ''}>${s.label}</option>`).join('');
-        body = `
-          <div class="cd-section">
-            <div class="cd-section-title">SAP Field Mapping</div>
-            <div class="cd-grid g2">
-              <div class="cd-field">
-                <label>SAP Existing Field</label>
-                <input type="text" value="${this._esc(col.sapExistingField || '')}" placeholder="e.g. KUNNR"
-                  style="font-family:monospace"
-                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapExistingField',this.value)">
-              </div>
-              <div class="cd-field">
-                <label>SAP Target Field <span style="font-weight:400;color:var(--text-subtle)">(S/4)</span></label>
-                <input type="text" value="${this._esc(col.sapTargetField || '')}" placeholder="e.g. PARTNER"
-                  style="font-family:monospace"
-                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapTargetField',this.value)">
-              </div>
-              <div class="cd-field">
-                <label>SAP BW Object</label>
-                <input type="text" value="${this._esc(col.sapBwObject || '')}" placeholder="e.g. 0CUSTOMER"
-                  style="font-family:monospace"
-                  onchange="DimensionLibrary._updateEditorCol('${cId}','sapBwObject',this.value)">
-              </div>
-              <div class="cd-field">
-                <label>Field Gap Status</label>
-                <select onchange="DimensionLibrary._updateEditorCol('${cId}','fieldGapStatus',this.value)">${gapOpts}</select>
-              </div>
+
+    } else if (tab === 'technical') {
+      const migOpts = typeof SAP_MIGRATION_STATUSES!=='undefined'
+        ? `<option value="" ${!col.sapMigrationStatus?'selected':''}>— Untagged —</option>`
+          + Object.entries(SAP_MIGRATION_STATUSES).filter(([k])=>k!=='').map(([k,v])=>
+              `<option value="${k}" ${col.sapMigrationStatus===k?'selected':''}>${v.label}</option>`).join('')
+        : '';
+      const gapOpts = Object.entries(typeof FIELD_GAP_STATUSES!=='undefined'?FIELD_GAP_STATUSES:{})
+        .map(([k,s])=>`<option value="${k}" ${(col.fieldGapStatus||'')===k?'selected':''}>${s.label}</option>`).join('');
+      const selMig = typeof SAP_MIGRATION_STATUSES!=='undefined'&&col.sapMigrationStatus
+        ? SAP_MIGRATION_STATUSES[col.sapMigrationStatus] : null;
+      body = `
+        <div class="cd-section">
+          <div class="cd-section-title">SAP Source</div>
+          <div class="cd-grid g2">
+            <div class="cd-field">
+              <label>SAP Existing Field <span style="font-weight:400;color:var(--text-subtle)">(ECC)</span></label>
+              <input type="text" value="${esc(col.sapExistingField||'')}" placeholder="e.g. KUNNR" style="font-family:monospace" ${upStr('sapExistingField')}>
             </div>
-          </div>`;
-      }
+            <div class="cd-field">
+              <label>SAP Target Field <span style="font-weight:400;color:var(--text-subtle)">(S/4)</span></label>
+              <input type="text" value="${esc(col.sapTargetField||'')}" placeholder="e.g. PARTNER" style="font-family:monospace" ${upStr('sapTargetField')}>
+            </div>
+            <div class="cd-field">
+              <label>SAP BW Object</label>
+              <input type="text" value="${esc(col.sapBwObject||'')}" placeholder="e.g. 0CUSTOMER" style="font-family:monospace" ${upStr('sapBwObject')}>
+            </div>
+            <div class="cd-field">
+              <label>Migration Status</label>
+              <select ${upStr('sapMigrationStatus')}>${migOpts}</select>
+              ${selMig ? `<span class="sap-module-badge" style="background:${selMig.bg};color:${selMig.color}">${selMig.short||selMig.label}</span>` : ''}
+            </div>
+            <div class="cd-field" style="grid-column:1/-1">
+              <label>Field Gap Status</label>
+              <select ${upStr('fieldGapStatus')}>${gapOpts}</select>
+            </div>
+          </div>
+        </div>`;
+
+    } else if (tab === 'hierarchy') {
+      // parent col options within this dim
+      const dimCols = this._editorState ? this._editorState.dim.columns : [];
+      const parentOpts = `<option value="" ${!col.parentColumnId?'selected':''}>— None —</option>`
+        + dimCols.filter(c=>c.id!==cId).map(c=>
+            `<option value="${c.id}" ${col.parentColumnId===c.id?'selected':''}>${esc(c.name||c.id)}</option>`).join('');
+      body = `
+        <div class="cd-section">
+          <div class="cd-section-title">Hierarchy Structure</div>
+          <div class="cd-grid g2">
+            <div class="cd-field">
+              <label>Hierarchy Name</label>
+              <input type="text" value="${esc(col.hierarchyName||'')}" placeholder="e.g. org_hierarchy" ${upStr('hierarchyName')}>
+            </div>
+            <div class="cd-field">
+              <label>Hierarchy Level <span style="font-weight:400;color:var(--text-subtle)">(1 = top)</span></label>
+              <input type="number" min="1" max="20" value="${col.hierarchyLevel!=null?col.hierarchyLevel:''}" placeholder="—"
+                onchange="DimensionLibrary._updateEditorCol('${cId}','hierarchyLevel',this.value?parseInt(this.value):null)">
+            </div>
+            <div class="cd-field" style="grid-column:1/-1">
+              <label>Parent Column</label>
+              <select ${upStr('parentColumnId')}>${parentOpts}</select>
+            </div>
+          </div>
+          <div class="cd-toggle" style="margin-top:8px">
+            <input type="checkbox" id="pk-${cId}" ${col.isParentKey?'checked':''} ${upChk('isParentKey')}>
+            <label for="pk-${cId}">Is parent key (self-referencing hierarchy)</label>
+          </div>
+        </div>`;
+
+    } else if (tab === 'stage') {
+      const transformOpts = ['','direct','derived','lookup','calculated','defaulted','truncated','sign_reversed','aggregated']
+        .map(k=>`<option value="${k}" ${col.transformType===k?'selected':''}>${k?k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'— Not set —'}</option>`).join('');
+      const nullOpts = ['','allow','default','reject']
+        .map(k=>`<option value="${k}" ${col.nullHandling===k?'selected':''}>${k?k.charAt(0).toUpperCase()+k.slice(1):'— Not set —'}</option>`).join('');
+      body = `
+        <div class="cd-section">
+          <div class="cd-section-title">Source Extraction</div>
+          <div class="cd-grid g2">
+            <div class="cd-field">
+              <label>Source Table / Path</label>
+              <input type="text" value="${esc(col.stageSource||'')}" placeholder="e.g. staging.customers" ${upStr('stageSource')}>
+            </div>
+            <div class="cd-field">
+              <label>Target Field</label>
+              <input type="text" value="${esc(col.stageTarget||'')}" placeholder="e.g. dim_customer.customer_key" ${upStr('stageTarget')}>
+            </div>
+          </div>
+        </div>
+        <div class="cd-section">
+          <div class="cd-section-title">Transformation</div>
+          <div class="cd-grid g2">
+            <div class="cd-field">
+              <label>Transform Type</label>
+              <select ${upStr('transformType')}>${transformOpts}</select>
+            </div>
+            <div class="cd-field">
+              <label>Null Handling</label>
+              <select ${upStr('nullHandling')}>${nullOpts}</select>
+            </div>
+            <div class="cd-field">
+              <label>Default Value</label>
+              <input type="text" value="${esc(col.defaultValue||'')}" placeholder="e.g. 'UNKNOWN'" ${upStr('defaultValue')}>
+            </div>
+            <div class="cd-field">
+              <label>Data Quality Rule</label>
+              <input type="text" value="${esc(col.dataQualityRule||'')}" placeholder="e.g. NOT NULL; must match master" ${upStr('dataQualityRule')}>
+            </div>
+            <div class="cd-field" style="grid-column:1/-1">
+              <label>Mapping / Derivation Rule</label>
+              <textarea style="min-height:65px;font-family:monospace;font-size:12px"
+                placeholder="e.g. LOOKUP(dim_customer, src_id = KUNNR)" ${upStr('formula')}>${esc(col.formula||'')}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="cd-section">
+          <div class="cd-section-title">Notes</div>
+          <div class="cd-grid g1">
+            <div class="cd-field">
+              <textarea style="min-height:70px" placeholder="Migration caveats, special handling…" ${upStr('stagingNote')}>${esc(col.stagingNote||'')}</textarea>
+            </div>
+          </div>
+        </div>`;
+
+    } else if (tab === 'notes') {
+      body = `
+        <div class="cd-section">
+          <div class="cd-section-title">Notes</div>
+          <div class="cd-grid g1">
+            <div class="cd-field">
+              <textarea style="min-height:140px" placeholder="Business rules, context, data quality…" ${upStr('notes')}>${esc(col.notes||'')}</textarea>
+            </div>
+          </div>
+        </div>`;
     }
 
     return `<div class="col-detail-tabs">${tabButtons}</div><div class="col-detail-body">${body}</div>`;

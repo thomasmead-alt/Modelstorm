@@ -121,6 +121,14 @@
         <span class="nav-label">SAP Migration</span>
       </a>
 
+      <a class="nav-item" data-section="hierarchies" data-tip="Hierarchy Library" href="#hierarchies">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span class="nav-label">Hierarchies</span>
+      </a>
+
       <div class="nav-section-label">Help</div>
 
       <a class="nav-item" data-section="guide" data-tip="BEAM Guide" href="#guide">
@@ -189,6 +197,7 @@
   <script src="js/mlanalysis.js"></script>
   <script src="js/ddlgen.js"></script>
   <script src="js/sapmigration.js"></script>
+  <script src="js/hierarchy.js"></script>
 
   <script>
     // ─── Global constants: event grain levels ─────────────
@@ -1234,6 +1243,8 @@
     Router.register('ddl/:id',                ({ id }) => DDLGen.render(id));
     Router.register('sap-migration',          ()       => SapMigration.renderProjectPicker());
     Router.register('sap-migration/:id',      ({ id }) => SapMigration.render(id));
+    Router.register('hierarchies',            ()       => HierarchyEditor.renderList());
+    Router.register('hierarchy-editor/:id',   ({ id }) => HierarchyEditor.render(id));
     Router.register('recents',  () => renderRecents());
     Router.register('guide',    () => renderGuide());
     Router.register('settings', () => renderSettings());
