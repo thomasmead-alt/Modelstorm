@@ -2161,6 +2161,23 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 
 /* ── Source/origin badge in column list ── */
 .col-src-badge { display:inline-flex; align-items:center; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+.col-conformed-badge { font-size:11px; color:#1d4ed8; flex-shrink:0; opacity:.7; }
+.col-list-item-conformed { border-left-color: #bfdbfe !important; }
+.col-list-item-conformed.active { background:#eff6ff; border-left-color:#1d4ed8 !important; }
+
+/* ── Conformed column read-only panel ── */
+.conformed-readonly-panel { display:flex; flex-direction:column; height:100%; }
+.conformed-readonly-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:20px 24px 16px; border-bottom:1px solid var(--border); background:#f8fbff; flex-shrink:0; }
+.conformed-readonly-source { font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+.conformed-readonly-name { font-size:17px; font-weight:600; color:var(--text); }
+.conformed-readonly-body { flex:1; overflow-y:auto; padding:20px 24px; }
+.conformed-fields-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; margin-bottom:16px; }
+.conformed-field { display:flex; flex-direction:column; gap:2px; }
+.conformed-field-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-subtle); }
+.conformed-field-value { font-size:13px; color:var(--text); font-weight:500; }
+.conformed-key-badge { display:inline-block; background:#fef3c7; color:#92400e; border:1px solid #fde68a; border-radius:4px; padding:1px 8px; font-size:11px; font-weight:700; }
+.conformed-description { background:#f9fafb; border:1px solid var(--border); border-radius:6px; padding:12px; }
+.conformed-readonly-footer { padding:14px 24px; border-top:1px solid var(--border); font-size:11px; color:var(--text-muted); background:#f9fafb; line-height:1.6; flex-shrink:0; }
 
 /* ── Editable event meta selects (grain / purpose) ── */
 .event-meta-select {

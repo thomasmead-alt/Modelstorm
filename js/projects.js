@@ -345,23 +345,27 @@ const Projects = {
 
   _colListItem(col, selectedColId, projectId, eventId, tab) {
     const cat = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { color: '#6b7280' };
-    // Source badge — show for all non-default origins
-    const SRC_SHORT = { source_system: null, derived: 'DER', lookup: 'LKP', sap_ecc: 'ECC', sap_s4: 'S/4' };
-    const srcShort = SRC_SHORT[col.source];
-    const srcDef = srcShort && typeof SOURCES !== 'undefined' ? (SOURCES[col.source] || null) : null;
-    const srcBadge = srcDef
-      ? `<span class="col-src-badge" title="${srcDef.label}" style="color:${srcDef.color};background:${srcDef.bg}">${srcShort}</span>`
-      : '';
+    // Conformed columns: show a dim badge instead of source badge
+    let badge = '';
+    if (col.isConformed && col.publicDimensionId) {
+      badge = `<span class="col-conformed-badge" title="Conformed dimension">⊞</span>`;
+    } else {
+      const SRC_SHORT = { source_system: null, derived: 'DER', lookup: 'LKP', sap_ecc: 'ECC', sap_s4: 'S/4' };
+      const srcShort = SRC_SHORT[col.source];
+      const srcDef = srcShort && typeof SOURCES !== 'undefined' ? (SOURCES[col.source] || null) : null;
+      badge = srcDef
+        ? `<span class="col-src-badge" title="${srcDef.label}" style="color:${srcDef.color};background:${srcDef.bg}">${srcShort}</span>`
+        : '';
+    }
     const isActive = col.id === selectedColId;
-    // Make sure selected tab is valid for this col when switching
-    const validTabs = this._validTabs(col);
-    const navTab = validTabs.find(t => t.id === tab) ? tab : 'summary';
+    // Conformed columns don't use tabs — navTab not used but kept for consistency
+    const navTab = col.isConformed ? 'summary' : (this._validTabs(col).find(t => t.id === tab) ? tab : 'summary');
     return `
-      <div class="col-list-item${isActive ? ' active' : ''}"
+      <div class="col-list-item${isActive ? ' active' : ''}${col.isConformed ? ' col-list-item-conformed' : ''}"
         onclick="Projects.renderEventDetail('${projectId}', '${eventId}', '${col.id}', '${navTab}')">
-        <div class="col-cat-dot" style="background:${cat.color}"></div>
+        <div class="col-cat-dot" style="background:${cat.color}${col.isConformed ? '' : ''}"></div>
         <span class="col-item-name" title="${this._esc(col.name)}">${this._esc(col.name) || '<em style="color:var(--text-subtle)">unnamed</em>'}</span>
-        ${srcBadge}
+        ${badge}
         <span class="col-item-type">${this._esc(col.dataType || 'VARCHAR')}</span>
       </div>
     `;
@@ -371,12 +375,11 @@ const Projects = {
     const isSAP = col.source === 'sap_ecc' || col.source === 'sap_s4';
     const isMeasure = col.category === 'how_many';
     return [
-      { id: 'summary',   label: 'Summary',     show: true },
-      { id: 'technical', label: 'SAP Tech',     show: isSAP },
-      { id: 'hierarchy', label: 'Hierarchy',    show: !isMeasure },
+      { id: 'summary',   label: 'Summary',      show: true },
+      { id: 'technical', label: 'SAP Tech',      show: isSAP },
+      { id: 'hierarchy', label: 'Hierarchy',     show: !isMeasure },
       { id: 'stage',     label: 'Stage Mapping', show: true },
-      { id: 'notes',     label: 'Notes',        show: true },
-      { id: 'conformed', label: 'Conformed',    show: !isMeasure },
+      { id: 'notes',     label: 'Notes',         show: true },
     ].filter(t => t.show);
   },
 
@@ -384,6 +387,12 @@ const Projects = {
     const pId = project.id;
     const eId = event.id;
     const cId = col.id;
+
+    // Conformed columns: read-only inherited view — no editable tabs
+    if (col.isConformed && col.publicDimensionId) {
+      return this._conformedReadOnlyPanel(col, event, project);
+    }
+
     const tabs = this._validTabs(col);
     const tabButtons = tabs.map(t =>
       `<button class="col-detail-tab${tab === t.id ? ' active' : ''}" data-tab="${t.id}"
@@ -396,10 +405,76 @@ const Projects = {
     else if (tab === 'hierarchy') body = this._tabHierarchy(col, event, project);
     else if (tab === 'stage')     body = this._tabStage(col, event, project);
     else if (tab === 'notes')     body = this._tabNotes(col, event, project);
-    else if (tab === 'conformed') body = this._tabConformed(col, event, project);
     else                          body = this._tabSummary(col, event, project);
 
     return `<div class="col-detail-tabs">${tabButtons}</div><div class="col-detail-body">${body}</div>`;
+  },
+
+  // ── Conformed column: read-only inherited view ────────────
+
+  _conformedReadOnlyPanel(col, event, project) {
+    const pId = project.id; const eId = event.id; const cId = col.id;
+    const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
+    const dim = allDims.find(d => d.id === col.publicDimensionId);
+    const dimCol = dim && col.publicDimensionColId
+      ? (dim.columns || []).find(c => c.id === col.publicDimensionColId)
+      : null;
+
+    const catInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[col.category]) || { label: col.category, color: '#6b7280' };
+    const respInfo = (typeof RESPONSIBILITY_TYPES !== 'undefined' && col.responsibilityType)
+      ? (RESPONSIBILITY_TYPES[col.responsibilityType] || null) : null;
+
+    const field = (label, value) => value
+      ? `<div class="conformed-field"><span class="conformed-field-label">${label}</span><span class="conformed-field-value">${this._esc(String(value))}</span></div>`
+      : '';
+
+    return `
+      <div class="conformed-readonly-panel">
+        <div class="conformed-readonly-header">
+          <div>
+            <div class="conformed-readonly-source">
+              ${dim
+                ? `Conformed from <a href="#dimension/${dim.id}" style="color:var(--info);font-weight:600">${this._esc(dim.name)}</a>${dim.icon ? ' ' + dim.icon : ''}`
+                : 'Conformed dimension'}
+            </div>
+            <div class="conformed-readonly-name">${this._esc(col.name || '—')}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            ${dim ? `<button class="btn btn-ghost btn-sm" onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')">↻ Sync</button>` : ''}
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)"
+              onclick="Projects.detachConformed('${pId}','${eId}','${cId}')">Detach</button>
+          </div>
+        </div>
+
+        <div class="conformed-readonly-body">
+          <div class="conformed-fields-grid">
+            ${field('Data Type', col.dataType)}
+            ${field('Category', catInfo.label)}
+            ${field('Responsibility', respInfo?.label || col.responsibilityType)}
+            ${col.isSurrogateKey ? `<div class="conformed-field"><span class="conformed-field-label">Role</span><span class="conformed-field-value conformed-key-badge">Surrogate Key</span></div>` : ''}
+            ${col.isNaturalKey  ? `<div class="conformed-field"><span class="conformed-field-label">Role</span><span class="conformed-field-value conformed-key-badge">Natural Key</span></div>` : ''}
+            ${col.scdType !== null && col.scdType !== undefined ? field('SCD Type', 'SCD' + col.scdType) : ''}
+            ${col.format ? field('Format / Examples', col.format) : ''}
+          </div>
+          ${col.description ? `
+          <div class="conformed-description">
+            <div class="conformed-field-label" style="margin-bottom:4px">Description</div>
+            <div style="font-size:13px;color:var(--text);line-height:1.6">${this._esc(col.description)}</div>
+          </div>` : ''}
+          ${col.notes ? `
+          <div class="conformed-description" style="margin-top:12px">
+            <div class="conformed-field-label" style="margin-bottom:4px">Notes</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${this._esc(col.notes)}</div>
+          </div>` : ''}
+        </div>
+
+        <div class="conformed-readonly-footer">
+          This column is inherited from the <strong>${dim ? this._esc(dim.name) : 'dimension'}</strong> template and cannot be edited directly.
+          Use <strong>Detach</strong> to make it an independent column, or
+          ${dim ? `edit the template in the <a href="#dimension/${dim.id}" style="color:var(--info)">Dimension Library</a> and click <strong>↻ Sync</strong> to pull updates.` : 'sync to refresh from the template.'}
+        </div>
+      </div>
+    `;
   },
 
   // ── Tab: Summary ──────────────────────────────────────────
@@ -407,14 +482,7 @@ const Projects = {
   _tabSummary(col, event, project) {
     const pId = project.id; const eId = event.id; const cId = col.id;
     const isMeasure = col.category === 'how_many';
-
-    // Conformed read-only: inherit from linked dim column
-    const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
-    const linkedDim = allDims.find(d => d.id === col.publicDimensionId);
-    const linkedDimCol = linkedDim && col.publicDimensionColId
-      ? linkedDim.columns.find(c => c.id === col.publicDimensionColId)
-      : null;
-    const isConformedLocked = col.isConformed && !!linkedDimCol;
+    // Note: conformed columns never reach here — they go to _conformedReadOnlyPanel instead
 
     // Source/Origin options
     const srcOpts = typeof SOURCES !== 'undefined'
@@ -459,16 +527,8 @@ const Projects = {
     const ownerOpts = `<option value="" ${!col.ownerId ? 'selected' : ''}>— Unassigned —</option>`
       + costObjects.map(o => `<option value="${o.id}" ${col.ownerId === o.id ? 'selected' : ''}>${this._esc(o.objectId || o.description || o.id)}</option>`).join('');
 
-    const roAttr = isConformedLocked ? 'readonly disabled style="background:#f9fafb;color:var(--text-muted)"' : '';
-    const conformedBanner = isConformedLocked ? `
-      <div class="conformed-locked-banner">
-        <strong>Inherited from ${this._esc(linkedDim.name)}</strong> — ${this._esc(linkedDimCol.name)}.
-        Edit in <a href="#dimension/${linkedDim.id}" style="color:var(--info)">Dimension Library</a> or
-        <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px"
-          onclick="Projects.syncFromDimTemplate('${pId}','${eId}','${cId}')">Sync now</button>
-        <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px;color:#ef4444"
-          onclick="Projects.updateColField('${pId}','${eId}','${cId}','publicDimensionId','',true)">Unlink</button>
-      </div>` : '';
+    const roAttr = ''; // conformed columns no longer reach this tab
+    const conformedBanner = '';
 
     return `
       ${conformedBanner}
@@ -941,6 +1001,21 @@ const Projects = {
     Projects.renderEventDetail(projectId, eventId, colId, activeTab);
   },
 
+  // Detach a conformed column — makes it a standalone editable column
+  detachConformed(projectId, eventId, colId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    const col = event.columns.find(c => c.id === colId);
+    if (!col) return;
+    col.isConformed = false;
+    col.publicDimensionId = '';
+    col.publicDimensionColId = '';
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId, colId, 'summary');
+  },
+
   // Re-sync from the linked dim col (e.g. after template was updated)
   syncFromDimTemplate(projectId, eventId, colId) {
     const project = Storage.getProject(projectId);
@@ -1117,13 +1192,7 @@ const Projects = {
               ${dimOpts}
             </select>
           </div>
-          <div class="form-group" id="colDimColGroup" style="display:none">
-            <label class="form-label" for="colDimColId">Column from template</label>
-            <select class="form-input" id="colDimColId">
-              <option value="">— Choose a column —</option>
-            </select>
-          </div>
-          <p id="colDimPreview" style="font-size:12px;color:var(--text-muted);margin:0"></p>
+          <div id="colDimPreview" style="margin-top:4px"></div>
         </div>
       `,
       confirmLabel: 'Add Column',
@@ -1151,26 +1220,39 @@ const Projects = {
         };
 
         if (mode === 'template') {
-          const dimId  = document.getElementById('colDimId')?.value;
-          const dimColId = document.getElementById('colDimColId')?.value;
-          if (!dimId || !dimColId) { Modal.shake(); return; }
+          const dimId = document.getElementById('colDimId')?.value;
+          if (!dimId) { Modal.shake(); return; }
           const allDims2 = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
           const dim = allDims2.find(d => d.id === dimId);
-          const dimCol = dim ? (dim.columns || []).find(c => c.id === dimColId) : null;
-          if (!dim || !dimCol) { Modal.shake(); return; }
-          col = {
-            ...base,
-            name: dimCol.name,
-            category: dim.category || 'who',
-            dataType: dimCol.dataType || 'VARCHAR',
-            description: dimCol.description || '',
-            responsibilityType: dimCol.responsibilityType || 'none',
-            hierarchyLevel: dimCol.hierarchyLevel || null,
-            isParentKey: dimCol.isParentKey || false,
-            publicDimensionId: dimId,
-            publicDimensionColId: dimColId,
-            isConformed: true
-          };
+          if (!dim || !(dim.columns || []).length) { Modal.shake(); return; }
+          // Add ALL columns from the dimension template
+          const project2 = Storage.getProject(projectId);
+          const event2 = project2.events.find(e => e.id === eventId);
+          if (!event2) return;
+          let firstColId = null;
+          dim.columns.forEach(dimCol => {
+            const newCol = {
+              ...base,
+              id: Storage.generateId(),
+              name: dimCol.name,
+              category: dimCol.category || dim.category || 'who',
+              dataType: dimCol.dataType || 'VARCHAR',
+              description: dimCol.description || '',
+              responsibilityType: dimCol.responsibilityType || 'none',
+              isSurrogateKey: dimCol.isKey || false,
+              hierarchyLevel: dimCol.hierarchyLevel || null,
+              isParentKey: dimCol.isParentKey || false,
+              publicDimensionId: dimId,
+              publicDimensionColId: dimCol.id,
+              isConformed: true
+            };
+            if (!firstColId) firstColId = newCol.id;
+            event2.columns.push(newCol);
+          });
+          Storage.saveEvent(projectId, event2);
+          Modal.hide();
+          Projects.renderEventDetail(projectId, eventId, firstColId, 'summary');
+          return;
         } else {
           const name = document.getElementById('colName')?.value.trim();
           if (!name) { Modal.shake(); return; }
@@ -1195,23 +1277,29 @@ const Projects = {
   },
 
   // Called when user picks a dimension template in the add-column modal
+  // Shows a preview of all columns that will be dropped in
   _onDimTemplateChange(dimId) {
-    const colGroup = document.getElementById('colDimColGroup');
-    const colSel   = document.getElementById('colDimColId');
-    const preview  = document.getElementById('colDimPreview');
-    if (!dimId) { if (colGroup) colGroup.style.display = 'none'; return; }
+    const preview = document.getElementById('colDimPreview');
+    if (!preview) return;
+    if (!dimId) { preview.innerHTML = ''; return; }
     const allDims = typeof Storage.getAllDimTemplates === 'function' ? Storage.getAllDimTemplates() : [];
     const dim = allDims.find(d => d.id === dimId);
-    if (!dim || !colSel) return;
-    colSel.innerHTML = '<option value="">— Choose a column —</option>'
-      + (dim.columns || []).map(c =>
-          `<option value="${c.id}">${c.isKey ? '🔑 ' : ''}${c.name} (${c.dataType})</option>`
-        ).join('');
-    colSel.onchange = () => {
-      const c = (dim.columns || []).find(x => x.id === colSel.value);
-      if (preview) preview.textContent = c ? (c.description || '') : '';
-    };
-    if (colGroup) colGroup.style.display = '';
+    if (!dim) { preview.innerHTML = ''; return; }
+    const cols = dim.columns || [];
+    preview.innerHTML = `
+      <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px;margin-top:4px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1d4ed8;margin-bottom:8px">
+          ${cols.length} column${cols.length !== 1 ? 's' : ''} will be added
+        </div>
+        ${cols.map(c => `
+          <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">
+            <span style="color:#1d4ed8;font-size:10px">${c.isKey ? '🔑' : '○'}</span>
+            <span style="font-weight:500;color:#111">${Projects._esc(c.name)}</span>
+            <span style="color:#6b7280;font-size:11px">${c.dataType || 'VARCHAR'}</span>
+            ${c.description ? `<span style="color:#9ca3af;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${Projects._esc(c.description)}">— ${Projects._esc(c.description)}</span>` : ''}
+          </div>`).join('')}
+        <div style="font-size:10px;color:#6b7280;margin-top:8px">All columns will be marked as conformed and cannot be edited directly.</div>
+      </div>`;
   },
 
   // Called when origin select changes in Add Column modal
