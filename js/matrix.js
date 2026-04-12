@@ -223,6 +223,7 @@ const Matrix = {
       <tr class="notes-row" id="notes-${col.id}" style="display:${col.notes || col.formula || col.sapTable || col.sapField || col.publicDimensionId || col.dateKeyRole || col.glAccount || col.hierarchyName || col.hierarchyLevel ? 'table-row' : 'none'}">
         <td colspan="2"></td>
         <td colspan="6" style="padding:4px 8px 8px">
+          <div class="notes-section" data-label="Notes &amp; Formula">
           <div style="display:flex;gap:8px">
             <div style="flex:1">
               <div style="font-size:10px;color:var(--text-subtle);margin-bottom:2px">NOTES</div>
@@ -238,7 +239,9 @@ const Matrix = {
                 onblur="Matrix.updateField('${col.id}', 'formula', this.value)">${this._esc(col.formula || '')}</textarea>
             </div>` : ''}
           </div>
+          </div>
           ${col.category === 'when' ? `
+          <div class="notes-section" data-label="Date Key Role">
           <div class="date-key-role-panel">
             <div class="date-key-role-header">Date Key Role</div>
             <div class="date-key-role-grid">
@@ -276,8 +279,10 @@ const Matrix = {
               </div>
             </div>
             ${col.isFinancialAnchor ? `<div style="font-size:10px;padding:4px 6px;background:#dcfce7;border-radius:4px;color:#166534;margin-top:4px">This column is the financial anchor — P&L, cash flow, and period-end reporting join through here.</div>` : ''}
+          </div>
           </div>` : ''}
           ${col.category === 'how_many' ? `
+          <div class="notes-section" data-label="GL Account">
           <div class="gl-account-panel">
             <div class="gl-account-header">GL Account</div>
             <div class="gl-account-grid">
@@ -300,8 +305,10 @@ const Matrix = {
                   onblur="Matrix.updateField('${col.id}', 'glAccountRangeTo', this.value)">
               </div>
             </div>
+          </div>
           </div>` : ''}
           ${(col.source === 'sap_ecc' || col.source === 'sap_s4') ? `
+          <div class="notes-section" data-label="SAP Technical Reference">
           <div class="sap-tech-ref">
             <div class="sap-tech-ref-header">SAP Technical Reference</div>
             <div class="sap-tech-ref-grid">
@@ -342,8 +349,10 @@ const Matrix = {
                   onblur="Matrix.updateField('${col.id}', '${col.category === 'how_many' ? 'copaValueField' : 'copaCharacteristic'}', this.value)">
               </div>
             </div>
+          </div>
           </div>` : ''}
           ${col.category !== 'how_many' ? `
+          <div class="notes-section" data-label="Conformed Dimension">
           <div class="dim-link-panel">
             <div style="font-size:10px;color:var(--text-subtle);margin:6px 0 3px;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Conformed Dimension</div>
             <div style="display:flex;align-items:center;gap:8px">
@@ -385,6 +394,7 @@ const Matrix = {
               </div>
             </div>
             ${col.isParentKey ? `<div style="font-size:10px;padding:4px 6px;background:#ede9fe;border-radius:4px;color:#5b21b6;margin-top:4px">Self-referencing FK — the DDL generator will add <code>REFERENCES same_table(surrogate_key)</code> for this column.</div>` : ''}
+          </div>
           </div>` : ''}
         </td>
         <td colspan="2"></td>

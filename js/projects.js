@@ -228,7 +228,7 @@ const Projects = {
       ? Object.entries(GRAINS).map(([k, g]) => `<option value="${k}" ${grain === k ? 'selected' : ''}>${g.label}</option>`).join('')
       : `<option value="${grain}">${grain}</option>`;
     const grainSelect = `<select class="event-meta-select"
-      style="background:${grainInfo.color}18;color:${grainInfo.color};border:1px solid ${grainInfo.color}40"
+      style="border-left:3px solid ${grainInfo.color};color:${grainInfo.color}"
       title="Grain — edit event grain"
       onchange="Projects.updateEventField('${projectId}','${eventId}','grain',this.value);Projects.renderEventDetail('${projectId}','${eventId}',null,null)">${grainOpts}</select>`;
 
@@ -238,7 +238,7 @@ const Projects = {
       ? Object.entries(EVENT_PURPOSES).map(([k, p]) => `<option value="${k}" ${purpose === k ? 'selected' : ''}>${p.label}</option>`).join('')
       : `<option value="${purpose}">${purpose}</option>`;
     const purposeSelect = `<select class="event-meta-select"
-      style="background:${purposeInfo.bg||'#f3f4f6'};color:${purposeInfo.color||'#6b7280'};border:1px solid ${purposeInfo.color||'#6b7280'}40"
+      style="border-left:3px solid ${purposeInfo.color||'#6b7280'};color:${purposeInfo.color||'#6b7280'}"
       title="Purpose — edit event purpose"
       onchange="Projects.updateEventField('${projectId}','${eventId}','eventPurpose',this.value);Projects.renderEventDetail('${projectId}','${eventId}',null,null)">${purposeOpts}</select>`;
 
@@ -269,12 +269,9 @@ const Projects = {
           ${grainSelect}
           ${purposeSelect}
           ${event.description ? `<span class="event-meta-desc">${this._esc(event.description)}</span>` : ''}
-          <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0">
-            <div class="event-completeness-wrap" title="${completeness.filled}/${completeness.total} 7W categories covered">
-              ${completeness.dots}
-              <span style="font-size:10px;color:var(--text-subtle)">${completeness.filled}/${completeness.total}</span>
-            </div>
-            <span style="font-size:11px;color:var(--text-subtle)">${event.columns.length} col${event.columns.length !== 1 ? 's' : ''}</span>
+          <div class="event-completeness" title="${completeness.filled}/${completeness.total} 7W categories covered">
+            ${completeness.dots}
+            <span class="event-completeness-count">${completeness.filled}/${completeness.total} · ${event.columns.length} col${event.columns.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
 

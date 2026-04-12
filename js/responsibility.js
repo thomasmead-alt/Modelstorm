@@ -80,9 +80,9 @@ const Responsibility = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#responsibility">Responsibility</a>
           <span class="bc-sep">›</span>
-          <span>Responsibility</span>
+          <span>${this._esc(project.name)}</span>
         </div>
         <div class="view-actions">
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('responsibility-gaps/${project.id}')">📊 Gap Analysis</button>
@@ -446,9 +446,9 @@ const Responsibility = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#responsibility">Responsibility</a>
           <span class="bc-sep">›</span>
-          <a href="#responsibility/${project.id}">Responsibility</a>
+          <a href="#responsibility/${project.id}">${this._esc(project.name)}</a>
           <span class="bc-sep">›</span>
           <span>Gap Analysis</span>
         </div>

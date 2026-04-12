@@ -79,9 +79,9 @@ const PLMapper = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#pl-mapper">P&amp;L Mapper</a>
           <span class="bc-sep">›</span>
-          <span>P&amp;L Mapper</span>
+          <span>${this._esc(project.name)}</span>
         </div>
         <div class="view-actions">
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('pl-coverage/${project.id}')">📊 Coverage Report</button>
@@ -366,9 +366,9 @@ const PLMapper = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#pl-mapper">P&amp;L Mapper</a>
           <span class="bc-sep">›</span>
-          <a href="#pl-mapper/${project.id}">P&amp;L Mapper</a>
+          <a href="#pl-mapper/${project.id}">${this._esc(project.name)}</a>
           <span class="bc-sep">›</span>
           <span>Coverage Report</span>
         </div>

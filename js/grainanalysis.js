@@ -77,9 +77,9 @@ const GrainAnalysis = {
           <div class="breadcrumb">
             <a href="#projects">Projects</a>
             <span class="bc-sep">›</span>
-            <a href="#project/${project.id}">${this._esc(project.name)}</a>
+            <a href="#grain-analysis">Grain Analysis</a>
             <span class="bc-sep">›</span>
-            <span>Grain Analysis</span>
+            <span>${this._esc(project.name)}</span>
           </div>
         </div>
         <div class="empty-state">
@@ -114,9 +114,9 @@ const GrainAnalysis = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#grain-analysis">Grain Analysis</a>
           <span class="bc-sep">›</span>
-          <span>Grain Analysis</span>
+          <span>${this._esc(project.name)}</span>
         </div>
       </div>
 

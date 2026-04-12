@@ -79,9 +79,9 @@ const Architecture = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#architecture">Architecture</a>
           <span class="bc-sep">›</span>
-          <span>Architecture</span>
+          <span>${this._esc(project.name)}</span>
         </div>
       </div>
 

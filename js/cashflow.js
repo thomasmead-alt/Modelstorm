@@ -75,9 +75,9 @@ const CashFlow = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#cashflow">Cash Flow Mapper</a>
           <span class="bc-sep">›</span>
-          <span>Cash Flow Mapper</span>
+          <span>${this._esc(project.name)}</span>
         </div>
         <div class="view-actions">
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('cashflow-coverage/${project.id}')">📊 Coverage &amp; Reconciliation</button>
@@ -296,9 +296,9 @@ const CashFlow = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#cashflow">Cash Flow Mapper</a>
           <span class="bc-sep">›</span>
-          <a href="#cashflow/${project.id}">Cash Flow Mapper</a>
+          <a href="#cashflow/${project.id}">${this._esc(project.name)}</a>
           <span class="bc-sep">›</span>
           <span>Coverage &amp; Reconciliation</span>
         </div>

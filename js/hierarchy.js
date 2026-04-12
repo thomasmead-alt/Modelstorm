@@ -63,11 +63,13 @@ const HierarchyEditor = {
 
     document.getElementById('app').innerHTML = `
       <div class="view-header">
-        <div>
-          <h1 class="view-title">Hierarchy Library</h1>
-          <p class="view-subtitle">Define roll-up hierarchies for conformed dimensions — SAP standard, BI-tool, or custom</p>
+        <div class="breadcrumb">
+          <a href="#projects">Projects</a>
+          <span class="bc-sep">›</span>
+          <span>Hierarchy Library</span>
         </div>
         <div class="view-actions">
+          <h1 class="view-title" style="margin:0;font-size:var(--text-lg)">Hierarchy Library</h1>
           <span style="font-size:12px;color:var(--text-muted)">${totalHier} hierarch${totalHier !== 1 ? 'ies' : 'y'} defined</span>
         </div>
       </div>
@@ -107,6 +109,8 @@ const HierarchyEditor = {
     document.getElementById('app').innerHTML = `
       <div class="view-header">
         <div class="breadcrumb">
+          <a href="#projects">Projects</a>
+          <span class="bc-sep">›</span>
           <a href="#hierarchies">Hierarchy Library</a>
           <span class="bc-sep">›</span>
           <span>${dim.icon ? dim.icon + ' ' : ''}${this._esc(dim.name)}</span>

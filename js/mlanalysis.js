@@ -81,9 +81,9 @@ const MLAnalysis = {
         <div class="breadcrumb">
           <a href="#projects">Projects</a>
           <span class="bc-sep">›</span>
-          <a href="#project/${project.id}">${this._esc(project.name)}</a>
+          <a href="#ml-opportunities">ML Opportunities</a>
           <span class="bc-sep">›</span>
-          <span>ML Opportunities</span>
+          <span>${this._esc(project.name)}</span>
         </div>
       </div>
 

@@ -68,10 +68,15 @@ const SapMigration = (() => {
     const app = document.getElementById('app');
     app.innerHTML = `
       <div class="view-header">
-        <div>
-          <a href="#sap-migration" class="btn btn-ghost btn-sm" style="margin-bottom:6px">← All Projects</a>
-          <h1 class="view-title">SAP Migration — ${esc(project.name)}</h1>
-          <p class="view-subtitle">ECC→S/4HANA field coverage analysis</p>
+        <div class="breadcrumb">
+          <a href="#projects">Projects</a>
+          <span class="bc-sep">›</span>
+          <a href="#sap-migration">SAP Migration</a>
+          <span class="bc-sep">›</span>
+          <span>${esc(project.name)}</span>
+        </div>
+        <div class="view-actions">
+          <h1 class="view-title" style="margin:0">${esc(project.name)} — SAP Migration</h1>
         </div>
       </div>
 

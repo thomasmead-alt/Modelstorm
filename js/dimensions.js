@@ -51,7 +51,8 @@ const DimensionLibrary = {
 
   _card(dim) {
     const cat = CATEGORIES[dim.category] || {};
-    const previewCols = dim.columns.slice(0, 5);
+    const previewCols = dim.columns.slice(0, 3);
+    const extra = dim.columns.length - 3;
     return `
       <div class="dim-card" onclick="Router.navigate('dimension/${dim.id}')">
         <div class="dim-card-header">
@@ -60,17 +61,16 @@ const DimensionLibrary = {
             <div class="dim-card-title">${this._esc(dim.name)}</div>
             <div class="dim-card-category">
               <span class="badge-sm" style="background:${cat.color || '#6b7280'}">${cat.label || dim.category}</span>
+              <span style="font-size:10px;color:var(--text-subtle)">${dim.columns.length} col${dim.columns.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         </div>
-        <p class="dim-card-desc">${this._esc(dim.description)}</p>
         <div class="dim-card-cols">
           ${previewCols.map(c => `<span class="dim-col-pill ${c.isKey ? 'is-key' : ''}">${this._esc(c.name)}</span>`).join('')}
-          ${dim.columns.length > 5 ? `<span class="dim-col-pill" style="color:var(--text-subtle)">+${dim.columns.length - 5} more</span>` : ''}
+          ${extra > 0 ? `<span class="dim-col-pill" style="color:var(--text-subtle)">+${extra} more</span>` : ''}
         </div>
         <div class="dim-card-actions">
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); DimensionLibrary.openApplyModal('${dim.id}')">Apply to Event</button>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); Router.navigate('dimension/${dim.id}')">View columns</button>
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); DimensionLibrary.cloneBuiltIn('${dim.id}')">Clone</button>
         </div>
       </div>
@@ -79,37 +79,23 @@ const DimensionLibrary = {
 
   _customCard(dim) {
     const cat = CATEGORIES[dim.category] || {};
-    const previewCols = dim.columns.slice(0, 5);
-    const gapCounts = this._gapCounts(dim);
-    const sa = dim.sapAlignment || {};
-    const hasSapObjects = ['existing','target','bw'].some(e => (sa[e] || {}).objectName);
-    const sapBadge = hasSapObjects
-      ? `<span class="dim-sap-linked-badge" title="Linked to SAP objects">SAP</span>`
-      : '';
-    const gapBadge = gapCounts.issues > 0
-      ? `<span class="dim-gap-pill gap-issue" style="font-size:10px">${gapCounts.issues} gap${gapCounts.issues !== 1 ? 's' : ''}</span>`
-      : gapCounts.ok > 0
-        ? `<span class="dim-gap-pill gap-ok" style="font-size:10px">${gapCounts.ok} aligned</span>`
-        : '';
+    const previewCols = dim.columns.slice(0, 3);
+    const extra = dim.columns.length - 3;
     return `
       <div class="dim-card dim-card-custom" onclick="Router.navigate('dimension/${dim.id}')">
         <div class="dim-card-header">
           <div class="dim-card-icon">${dim.icon || '📋'}</div>
           <div style="flex:1;min-width:0">
-            <div class="dim-card-title">${this._esc(dim.name)}
-              <span class="dim-card-custom-badge">Custom</span>
-              ${sapBadge}
-            </div>
-            <div class="dim-card-category" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div class="dim-card-title">${this._esc(dim.name)}</div>
+            <div class="dim-card-category" style="display:flex;align-items:center;gap:6px">
               <span class="badge-sm" style="background:${cat.color || '#6b7280'}">${cat.label || dim.category}</span>
-              ${gapBadge}
+              <span style="font-size:10px;color:var(--text-subtle)">${dim.columns.length} col${dim.columns.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         </div>
-        <p class="dim-card-desc">${this._esc(dim.description || '')}</p>
         <div class="dim-card-cols">
           ${previewCols.map(c => `<span class="dim-col-pill ${c.isKey ? 'is-key' : ''}">${this._esc(c.name)}</span>`).join('')}
-          ${dim.columns.length > 5 ? `<span class="dim-col-pill" style="color:var(--text-subtle)">+${dim.columns.length - 5} more</span>` : ''}
+          ${extra > 0 ? `<span class="dim-col-pill" style="color:var(--text-subtle)">+${extra} more</span>` : ''}
         </div>
         <div class="dim-card-actions">
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); DimensionLibrary.openApplyModal('${dim.id}')">Apply to Event</button>
