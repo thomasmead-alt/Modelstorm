@@ -97,6 +97,8 @@ const Storage = {
         if (!col.hierarchyName)   col.hierarchyName   = '';
         if (col.isParentKey === undefined) col.isParentKey = false;
         if (!col.parentColumnId)  col.parentColumnId  = '';
+        // Phase 6: per-column SAP module (replaces event-level subledger)
+        if (!col.sapModule) col.sapModule = '';
         return col;
       });
       return e;
