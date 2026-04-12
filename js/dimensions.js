@@ -80,6 +80,17 @@ const DimensionLibrary = {
   _customCard(dim) {
     const cat = CATEGORIES[dim.category] || {};
     const previewCols = dim.columns.slice(0, 5);
+    const gapCounts = this._gapCounts(dim);
+    const sa = dim.sapAlignment || {};
+    const hasSapObjects = ['existing','target','bw'].some(e => (sa[e] || {}).objectName);
+    const sapBadge = hasSapObjects
+      ? `<span class="dim-sap-linked-badge" title="Linked to SAP objects">SAP</span>`
+      : '';
+    const gapBadge = gapCounts.issues > 0
+      ? `<span class="dim-gap-pill gap-issue" style="font-size:10px">${gapCounts.issues} gap${gapCounts.issues !== 1 ? 's' : ''}</span>`
+      : gapCounts.ok > 0
+        ? `<span class="dim-gap-pill gap-ok" style="font-size:10px">${gapCounts.ok} aligned</span>`
+        : '';
     return `
       <div class="dim-card dim-card-custom" onclick="Router.navigate('dimension/${dim.id}')">
         <div class="dim-card-header">
@@ -87,9 +98,11 @@ const DimensionLibrary = {
           <div style="flex:1;min-width:0">
             <div class="dim-card-title">${this._esc(dim.name)}
               <span class="dim-card-custom-badge">Custom</span>
+              ${sapBadge}
             </div>
-            <div class="dim-card-category">
+            <div class="dim-card-category" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span class="badge-sm" style="background:${cat.color || '#6b7280'}">${cat.label || dim.category}</span>
+              ${gapBadge}
             </div>
           </div>
         </div>
@@ -186,6 +199,8 @@ const DimensionLibrary = {
         <button class="btn btn-primary" onclick="DimensionLibrary.openApplyModal('${dim.id}')">Apply to Event →</button>
         <a href="#dimensions" class="btn btn-ghost" style="margin-left:8px">← Back to Library</a>
       </div>
+
+      ${dim.isCustom ? this._renderAlignmentReadOnly(dim) : ''}
     `;
   },
 
@@ -287,6 +302,8 @@ const DimensionLibrary = {
         </div>
       </div>
 
+      ${this._renderSapAlignmentSection(dim)}
+
       <div class="dim-editor-footer">
         <button class="btn btn-primary" onclick="DimensionLibrary._saveEditor()">
           ${isNew ? 'Create Dimension' : 'Save Changes'}
@@ -348,15 +365,34 @@ const DimensionLibrary = {
       hierarchyLevel: null,
       hierarchyName: '',
       isParentKey: false,
-      parentColumnId: ''
+      parentColumnId: '',
+      sapExistingField: '',
+      sapTargetField: '',
+      sapBwObject: '',
+      fieldGapStatus: ''
     };
     this._editorState.dim.columns.push(col);
     const tbody = document.getElementById('dimEditorBody');
     if (tbody) {
       tbody.insertAdjacentHTML('beforeend', this._editorRow(col));
-      // Remove empty-state paragraph if present
       const empty = document.querySelector('.dim-editor-empty');
       if (empty) empty.remove();
+    }
+    // Also add a row to the SAP field mapping table
+    const sapBody = document.getElementById('dimSapFieldBody');
+    if (sapBody) {
+      // Remove the "add columns first" placeholder if present
+      const placeholder = sapBody.querySelector('td[colspan="5"]');
+      if (placeholder) placeholder.closest('tr').remove();
+      const gapOpts = Object.entries(typeof FIELD_GAP_STATUSES !== 'undefined' ? FIELD_GAP_STATUSES : {})
+        .map(([k, s]) => `<option value="${k}">${s.label}</option>`).join('');
+      sapBody.insertAdjacentHTML('beforeend', `<tr id="sap-row-${col.id}">
+        <td><code style="font-size:12px">${this._esc(col.name || '(unnamed)')}</code><div style="font-size:10px;color:var(--text-subtle)">${col.dataType}</div></td>
+        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. KUNNR" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapExistingField',this.value)"></td>
+        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. PARTNER" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapTargetField',this.value)"></td>
+        <td><input class="cell-input" style="font-family:monospace;font-size:12px;width:100%" placeholder="e.g. 0CUSTOMER" onblur="DimensionLibrary._updateEditorCol('${col.id}','sapBwObject',this.value)"></td>
+        <td><select class="cell-select" style="font-size:11px;width:100%" onchange="DimensionLibrary._updateEditorCol('${col.id}','fieldGapStatus',this.value)">${gapOpts}</select></td>
+      </tr>`);
     }
     // Update column count in header
     const hdr = document.querySelector('.dim-editor-section-header h3');
@@ -374,6 +410,9 @@ const DimensionLibrary = {
     this._editorState.dim.columns = this._editorState.dim.columns.filter(c => c.id !== colId);
     const row = document.querySelector(`tr[data-col-id="${colId}"]`);
     if (row) row.remove();
+    // Also remove from SAP field mapping table
+    const sapRow = document.getElementById(`sap-row-${colId}`);
+    if (sapRow) sapRow.remove();
     // Update column count
     const hdr = document.querySelector('.dim-editor-section-header h3');
     if (hdr) hdr.textContent = `Columns (${this._editorState.dim.columns.length})`;
@@ -383,6 +422,253 @@ const DimensionLibrary = {
         wrap.insertAdjacentHTML('beforeend', '<p class="dim-editor-empty">No columns yet — click <strong>+ Add Column</strong> to begin.</p>');
       }
     }
+  },
+
+  // ── SAP Alignment section (editor) ───────────────────
+
+  _renderSapAlignmentSection(dim) {
+    const sa = dim.sapAlignment || {};
+    const envs = [
+      { key: 'existing', label: 'Existing SAP',    badge: 'sap-env-existing', defaultType: 'table',      hint: 'e.g. KNA1, CSKS, LFA1' },
+      { key: 'target',   label: 'Target S/4HANA',  badge: 'sap-env-target',   defaultType: 'table',      hint: 'e.g. BUT000, ACDOCA, CDS View' },
+      { key: 'bw',       label: 'SAP BW / BW4',    badge: 'sap-env-bw',       defaultType: 'infoobject', hint: 'e.g. 0CUSTOMER, ZMAT_ATTR' }
+    ];
+    const typeOpts = (selected) => Object.entries(
+      typeof DIM_SAP_OBJECT_TYPES !== 'undefined' ? DIM_SAP_OBJECT_TYPES : {}
+    ).map(([k, v]) => `<option value="${k}" ${selected === k ? 'selected' : ''}>${v}</option>`).join('');
+
+    const gapOpts = (selected) => Object.entries(
+      typeof FIELD_GAP_STATUSES !== 'undefined' ? FIELD_GAP_STATUSES : {}
+    ).map(([k, s]) => `<option value="${k}" ${selected === k ? 'selected' : ''}>${s.label}</option>`).join('');
+
+    const objRows = envs.map(env => {
+      const obj = sa[env.key] || {};
+      return `<tr>
+        <td><span class="sap-env-badge ${env.badge}">${env.label}</span></td>
+        <td>
+          <select class="cell-select" style="font-size:12px;width:100%"
+            onchange="DimensionLibrary._updateSapObject('${env.key}','objectType',this.value)">
+            <option value="">— Select type —</option>
+            ${typeOpts(obj.objectType || env.defaultType)}
+          </select>
+        </td>
+        <td>
+          <input class="cell-input" style="font-family:monospace;font-size:12px;width:100%"
+            value="${this._esc(obj.objectName || '')}" placeholder="${env.hint}"
+            onblur="DimensionLibrary._updateSapObject('${env.key}','objectName',this.value)">
+        </td>
+        <td>
+          <input class="cell-input" style="font-size:12px;width:100%"
+            value="${this._esc(obj.description || '')}" placeholder="Short description…"
+            onblur="DimensionLibrary._updateSapObject('${env.key}','description',this.value)">
+        </td>
+      </tr>`;
+    }).join('');
+
+    const fieldRows = dim.columns.length === 0
+      ? `<tr><td colspan="5" style="text-align:center;color:var(--text-subtle);font-size:12px;padding:12px">Add columns first, then map them to SAP fields here.</td></tr>`
+      : dim.columns.map(col => {
+          const gapKey = col.fieldGapStatus || '';
+          const gapInfo = (typeof FIELD_GAP_STATUSES !== 'undefined' && FIELD_GAP_STATUSES[gapKey]) || { color: '#9ca3af', bg: '#f3f4f6' };
+          return `<tr id="sap-row-${col.id}">
+            <td>
+              <code style="font-size:12px">${this._esc(col.name || '(unnamed)')}</code>
+              ${col.isKey ? ' <span class="key-indicator">PK</span>' : ''}
+              <div style="font-size:10px;color:var(--text-subtle)">${col.dataType}</div>
+            </td>
+            <td>
+              <input class="cell-input" style="font-family:monospace;font-size:12px;width:100%"
+                value="${this._esc(col.sapExistingField || '')}" placeholder="e.g. KUNNR"
+                onblur="DimensionLibrary._updateEditorCol('${col.id}','sapExistingField',this.value)">
+            </td>
+            <td>
+              <input class="cell-input" style="font-family:monospace;font-size:12px;width:100%"
+                value="${this._esc(col.sapTargetField || '')}" placeholder="e.g. PARTNER"
+                onblur="DimensionLibrary._updateEditorCol('${col.id}','sapTargetField',this.value)">
+            </td>
+            <td>
+              <input class="cell-input" style="font-family:monospace;font-size:12px;width:100%"
+                value="${this._esc(col.sapBwObject || '')}" placeholder="e.g. 0CUSTOMER"
+                onblur="DimensionLibrary._updateEditorCol('${col.id}','sapBwObject',this.value)">
+            </td>
+            <td>
+              <select class="cell-select" style="font-size:11px;width:100%"
+                onchange="DimensionLibrary._updateEditorCol('${col.id}','fieldGapStatus',this.value)">
+                ${gapOpts(gapKey)}
+              </select>
+              ${gapKey && gapKey !== 'ok' ? `<span class="field-gap-dot" style="background:${gapInfo.color}" title="${gapInfo.label || gapKey}"></span>` : ''}
+            </td>
+          </tr>`;
+        }).join('');
+
+    // Gap summary counts
+    const gapCounts = this._gapCounts(dim);
+    const hasSapData = envs.some(e => (sa[e.key] || {}).objectName);
+
+    return `
+      <div class="dim-editor-section" style="margin-top:16px">
+        <div class="dim-editor-section-header">
+          <h3>SAP Object Alignment</h3>
+          <span style="font-size:11px;color:#a0a0c0">Link this dimension to existing SAP, target S/4HANA, and BW objects</span>
+        </div>
+
+        <div style="padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">Object-Level Mapping</div>
+          <table class="dim-sap-obj-table">
+            <thead>
+              <tr>
+                <th style="width:140px">Environment</th>
+                <th style="width:200px">Object Type</th>
+                <th style="width:180px">Object Name</th>
+                <th>Description / Notes</th>
+              </tr>
+            </thead>
+            <tbody>${objRows}</tbody>
+          </table>
+        </div>
+
+        <div style="padding:12px 14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase">Column Field Mapping</div>
+            ${gapCounts.total > 0 ? `<div class="dim-gap-pill-row">${this._gapPills(gapCounts)}</div>` : ''}
+          </div>
+          <div style="overflow-x:auto">
+            <table class="dim-sap-field-table">
+              <thead>
+                <tr>
+                  <th style="min-width:140px">BEAM Column</th>
+                  <th style="min-width:120px">Existing SAP Field</th>
+                  <th style="min-width:120px">Target S/4 Field</th>
+                  <th style="min-width:120px">BW InfoObject</th>
+                  <th style="min-width:160px">Gap Status</th>
+                </tr>
+              </thead>
+              <tbody id="dimSapFieldBody">${fieldRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _renderAlignmentReadOnly(dim) {
+    const sa = dim.sapAlignment || {};
+    const envs = [
+      { key: 'existing', label: 'Existing SAP',   badge: 'sap-env-existing' },
+      { key: 'target',   label: 'Target S/4HANA', badge: 'sap-env-target' },
+      { key: 'bw',       label: 'SAP BW / BW4',   badge: 'sap-env-bw' }
+    ];
+    const hasObjects = envs.some(e => (sa[e.key] || {}).objectName);
+    const hasMappings = (dim.columns || []).some(c => c.sapExistingField || c.sapTargetField || c.sapBwObject || c.fieldGapStatus);
+
+    if (!hasObjects && !hasMappings) {
+      return `<div class="dim-detail-sap-empty">
+        <div style="font-size:13px;color:var(--text-muted)">No SAP alignment data yet.</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px"
+          onclick="Router.navigate('dimension/${dim.id}/edit')">Add SAP mapping →</button>
+      </div>`;
+    }
+
+    const objRows = envs.map(env => {
+      const obj = sa[env.key] || {};
+      if (!obj.objectName) return `<tr>
+        <td><span class="sap-env-badge ${env.badge}">${env.label}</span></td>
+        <td colspan="3" style="color:var(--text-subtle);font-size:12px;font-style:italic">Not mapped</td>
+      </tr>`;
+      const objTypeLabel = (typeof DIM_SAP_OBJECT_TYPES !== 'undefined' && DIM_SAP_OBJECT_TYPES[obj.objectType]) || obj.objectType || '';
+      return `<tr>
+        <td><span class="sap-env-badge ${env.badge}">${env.label}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${this._esc(objTypeLabel)}</td>
+        <td><code style="font-size:13px;font-weight:700">${this._esc(obj.objectName)}</code></td>
+        <td style="font-size:12px;color:var(--text-muted)">${this._esc(obj.description || '')}</td>
+      </tr>`;
+    }).join('');
+
+    const gapCounts = this._gapCounts(dim);
+    const fieldRows = (dim.columns || []).map(col => {
+      const gapKey = col.fieldGapStatus || '';
+      const gapInfo = (typeof FIELD_GAP_STATUSES !== 'undefined' && FIELD_GAP_STATUSES[gapKey]) || { label: '—', color: '#9ca3af', bg: '#f3f4f6' };
+      return `<tr>
+        <td>
+          <code>${this._esc(col.name || '(unnamed)')}</code>
+          ${col.isKey ? ' <span class="key-indicator">PK</span>' : ''}
+        </td>
+        <td><code style="font-size:12px;color:var(--text-muted)">${this._esc(col.sapExistingField || '—')}</code></td>
+        <td><code style="font-size:12px;color:var(--text-muted)">${this._esc(col.sapTargetField || '—')}</code></td>
+        <td><code style="font-size:12px;color:var(--text-muted)">${this._esc(col.sapBwObject || '—')}</code></td>
+        <td>
+          ${gapKey
+            ? `<span class="field-gap-badge" style="background:${gapInfo.bg};color:${gapInfo.color}">${gapInfo.label}</span>`
+            : '<span style="color:var(--text-subtle);font-size:11px">—</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="margin-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="font-size:14px;font-weight:700;margin:0">SAP Object Alignment</h3>
+          <div class="dim-gap-pill-row">${this._gapPills(gapCounts)}</div>
+        </div>
+
+        ${hasObjects ? `
+        <table class="dim-sap-obj-table dim-sap-obj-table-readonly" style="margin-bottom:16px">
+          <thead>
+            <tr>
+              <th style="width:140px">Environment</th>
+              <th style="width:160px">Type</th>
+              <th style="width:180px">Object Name</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>${objRows}</tbody>
+        </table>` : ''}
+
+        ${hasMappings ? `
+        <div style="overflow-x:auto">
+          <table class="dim-sap-field-table dim-sap-field-table-readonly">
+            <thead>
+              <tr>
+                <th>BEAM Column</th>
+                <th>Existing SAP Field</th>
+                <th>Target S/4 Field</th>
+                <th>BW InfoObject</th>
+                <th>Gap Status</th>
+              </tr>
+            </thead>
+            <tbody>${fieldRows}</tbody>
+          </table>
+        </div>` : ''}
+      </div>
+    `;
+  },
+
+  _updateSapObject(env, field, value) {
+    if (!this._editorState) return;
+    const dim = this._editorState.dim;
+    if (!dim.sapAlignment) dim.sapAlignment = {};
+    if (!dim.sapAlignment[env]) dim.sapAlignment[env] = { objectType: '', objectName: '', description: '' };
+    dim.sapAlignment[env][field] = value;
+  },
+
+  _gapCounts(dim) {
+    const counts = { ok: 0, issues: 0, unassessed: 0, total: 0 };
+    (dim.columns || []).forEach(col => {
+      counts.total++;
+      const s = col.fieldGapStatus || '';
+      if (!s) counts.unassessed++;
+      else if (s === 'ok') counts.ok++;
+      else counts.issues++;
+    });
+    return counts;
+  },
+
+  _gapPills(counts) {
+    const pills = [];
+    if (counts.ok > 0)         pills.push(`<span class="dim-gap-pill gap-ok">${counts.ok} aligned</span>`);
+    if (counts.issues > 0)     pills.push(`<span class="dim-gap-pill gap-issue">${counts.issues} gap${counts.issues !== 1 ? 's' : ''}</span>`);
+    if (counts.unassessed > 0) pills.push(`<span class="dim-gap-pill gap-unassessed">${counts.unassessed} unassessed</span>`);
+    return pills.join('');
   },
 
   _saveEditor() {

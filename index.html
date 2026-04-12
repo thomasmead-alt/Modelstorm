@@ -402,6 +402,31 @@
       { eccTable: 'VIRE00',    s4Table: 'VIRE00 / RE-FX CDS',       description: 'RE Rental Agreement',       note: 'Agreement master unchanged. S/4 RE-FX adds IFRS 16 lease liability / ROU asset posting automation. Use I_RentalAgreement CDS view.' },
     ];
 
+    // ─── Global constants: dimension SAP alignment ────────────
+    const FIELD_GAP_STATUSES = {
+      '':               { label: '— Not assessed',          color: '#9ca3af', bg: '#f3f4f6' },
+      ok:               { label: 'Aligned',                 color: '#16a34a', bg: '#dcfce7' },
+      missing_source:   { label: 'Missing in existing SAP', color: '#dc2626', bg: '#fee2e2' },
+      missing_target:   { label: 'Missing in target S/4',   color: '#c2410c', bg: '#fff7ed' },
+      missing_bw:       { label: 'No BW mapping',           color: '#6b7280', bg: '#f3f4f6' },
+      changed:          { label: 'Changed (ECC→S/4)',        color: '#d97706', bg: '#fef3c7' },
+      deprecated:       { label: 'Deprecated in S/4',       color: '#7f1d1d', bg: '#fee2e2' },
+      new_in_target:    { label: 'New in target S/4',       color: '#0369a1', bg: '#e0f2fe' }
+    };
+
+    const DIM_SAP_OBJECT_TYPES = {
+      table:           'Table (e.g. KNA1, CSKS)',
+      view:            'Database View / CDS View',
+      infoobject:      'BW InfoObject (0* or Z*)',
+      dso:             'DSO / Advanced DSO',
+      masterdata:      'Master Data (attribute / text)',
+      infoprovider:    'InfoProvider / CompositeProvider',
+      businesspartner: 'Business Partner (BUT000)',
+      customizing:     'Customizing Table',
+      api:             'OData API / BAPI',
+      cds:             'CDS View (VDM)',
+    };
+
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
       {

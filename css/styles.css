@@ -1976,3 +1976,65 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 .hierarchy-panel-grid {
   display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 8px; align-items: start;
 }
+
+/* ── SAP Object Alignment — dimension editor/detail ─────── */
+.sap-env-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.sap-env-existing { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.sap-env-target   { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.sap-env-bw       { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+.dim-sap-obj-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.dim-sap-obj-table th {
+  background: #f9fafb; color: var(--text-muted); font-size: 11px; font-weight: 600;
+  padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border);
+}
+.dim-sap-obj-table td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+.dim-sap-obj-table-readonly tbody tr:hover td { background: #f8f9ff; }
+
+.dim-sap-field-table {
+  width: 100%; border-collapse: collapse; font-size: 12px; min-width: 700px;
+}
+.dim-sap-field-table th {
+  background: #f9fafb; color: var(--text-muted); font-size: 11px; font-weight: 600;
+  padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.dim-sap-field-table td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+.dim-sap-field-table-readonly tbody tr:hover td { background: #f8f9ff; }
+
+.field-gap-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.field-gap-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-left: 5px; vertical-align: middle;
+}
+
+/* Gap summary pills */
+.dim-gap-pill-row { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.dim-gap-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.gap-ok     { background: #dcfce7; color: #16a34a; }
+.gap-issue  { background: #fee2e2; color: #dc2626; }
+.gap-unassessed { background: #f3f4f6; color: #6b7280; }
+
+/* SAP-linked badge on custom dim cards */
+.dim-sap-linked-badge {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; font-family: 'Fira Code', monospace;
+  background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe;
+  margin-left: 4px; vertical-align: middle;
+}
+
+/* Empty state in SAP alignment on detail page */
+.dim-detail-sap-empty {
+  margin-top: 20px; padding: 16px; text-align: center;
+  background: #f9fafb; border: 1px dashed var(--border); border-radius: var(--radius);
+}
