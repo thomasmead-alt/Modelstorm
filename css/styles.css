@@ -683,6 +683,7 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 
 .delete-row { opacity: 0; transition: opacity var(--transition); }
 .matrix-row:hover .delete-row { opacity: 1; }
+.dim-editor-row:hover .delete-row { opacity: 1; }
 
 /* ─────────────────────────────────────────────
    7W Reference Grid
