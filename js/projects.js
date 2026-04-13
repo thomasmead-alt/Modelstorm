@@ -178,6 +178,7 @@ const Projects = {
         <div class="card-actions" onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${event.id}')">Edit Matrix</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${event.id}')">Diagram</button>
+          <button class="btn btn-ghost btn-sm" onclick="Projects.duplicateEvent('${projectId}', '${event.id}', false)">Duplicate</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('pl-mapper/${projectId}')">P&amp;L</button>
           <button class="btn btn-danger btn-sm" onclick="Projects.confirmDeleteEvent('${projectId}', '${event.id}', '${this._esc(event.name)}')">Delete</button>
         </div>
@@ -259,6 +260,7 @@ const Projects = {
           <button class="btn btn-ghost btn-sm" onclick="Export.printEvent(Storage.getProject('${projectId}').events.find(e=>e.id==='${eventId}'),'${this._esc(project.name)}')">Print</button>
           <button class="btn btn-ghost btn-sm" onclick="Projects.generateSampleData('${projectId}','${eventId}')">Sample Data</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${eventId}')">View Diagram</button>
+          <button class="btn btn-ghost btn-sm" onclick="Projects.duplicateEvent('${projectId}', '${eventId}', true)">Duplicate</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${eventId}')">Edit Matrix</button>
           <button class="btn btn-primary btn-sm" onclick="Projects.openAddColumnModal('${projectId}', '${eventId}')">+ Add Column</button>
         </div>
@@ -1470,6 +1472,17 @@ const Projects = {
         Projects.renderList();
       }
     });
+  },
+
+  duplicateEvent(projectId, eventId, navigateToNew) {
+    const newEvent = Storage.duplicateEvent(projectId, eventId);
+    if (!newEvent) return;
+    showToast(`"${this._esc(newEvent.name)}" created`);
+    if (navigateToNew) {
+      Projects.renderEventDetail(projectId, newEvent.id);
+    } else {
+      Projects.renderProject(projectId);
+    }
   },
 
   confirmDeleteEvent(projectId, eventId, name) {

@@ -335,6 +335,26 @@ const Storage = {
     this.save(data);
   },
 
+  // ── Event duplication ─────────────────────────────────────
+
+  duplicateEvent(projectId, eventId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    const event = (project?.events || []).find(e => e.id === eventId);
+    if (!event) return null;
+
+    const newEvent = JSON.parse(JSON.stringify(event));
+    newEvent.id = this.generateId();
+    newEvent.name = 'Copy of ' + event.name;
+    newEvent.columns = (newEvent.columns || []).map(col => ({
+      ...col, id: this.generateId()
+    }));
+
+    project.events.push(newEvent);
+    this.save(data);
+    return newEvent;
+  },
+
   // ── Cash flow line helpers ────────────────────────────────
 
   getCashFlowLines(projectId) {

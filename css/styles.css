@@ -748,7 +748,8 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  height: 500px;
+  min-height: 500px;
+  height: auto;
   cursor: grab;
   position: relative;
 }
