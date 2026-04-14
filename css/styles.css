@@ -1323,8 +1323,7 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 }
 .dim-editor-footer { display: flex; align-items: center; gap: 8px; padding: 16px 0; }
 
-/* Dimension editor two-panel */
-.dim-editor-two-panel { height: 420px; margin-bottom:20px; }
+/* Dimension editor two-panel (height controlled by line 2223 rule) */
 
 /* Conformed dimension linker (matrix notes row) */
 .dim-link-panel { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
@@ -2198,6 +2197,9 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 .sap-module-badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; margin-top:4px; }
 .conformed-link-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; border-radius:4px; font-size:12px; font-weight:600; margin-top:6px; flex-wrap:wrap; }
 .col-list-empty { padding:24px 16px; text-align:center; color:var(--text-subtle); font-size:12px; }
+.col-list-delete-btn { display:none; margin-left:auto; flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--text-subtle); font-size:13px; padding:0 2px; line-height:1; }
+.col-list-delete-btn:hover { color:var(--danger); }
+.col-list-item:hover .col-list-delete-btn { display:block; }
 .grain-diagram-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
 
 /* ── Event Detail enhancements ── */

@@ -213,6 +213,7 @@ const DimensionLibrary = {
     // Store working copy with two-panel state
     this._editorState = {
       dim,
+      isNew,
       selectedColId: dim.columns.length > 0 ? dim.columns[0].id : null,
       activeColTab: 'definition'
     };
@@ -316,6 +317,8 @@ const DimensionLibrary = {
           ${col.isKey ? '<span style="font-size:9px;font-weight:700;background:#f59e0b;color:#fff;padding:1px 4px;border-radius:3px;flex-shrink:0">PK</span>' : ''}
           <span class="col-item-name" title="${this._esc(col.name)}">${this._esc(col.name) || '<em style="color:var(--text-subtle)">unnamed</em>'}</span>
           <span class="col-item-type">${this._esc(col.dataType || 'VARCHAR')}</span>
+          <button class="col-list-delete-btn" title="Remove column"
+            onclick="event.stopPropagation();DimensionLibrary._deleteEditorCol('${col.id}')">✕</button>
         </div>`;
     }).join('');
   },
@@ -676,6 +679,11 @@ const DimensionLibrary = {
       this._editorState.selectedColId = this._editorState.dim.columns.length > 0
         ? this._editorState.dim.columns[0].id
         : null;
+    }
+
+    // Persist immediately for existing dims — no need for user to also click "Save Changes"
+    if (!this._editorState.isNew) {
+      Storage.saveCustomDimension(this._editorState.dim);
     }
 
     // Update the left panel list
