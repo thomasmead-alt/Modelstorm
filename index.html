@@ -497,7 +497,7 @@
     // ─── Global constants: public dimension templates ──────
     const DEFAULT_PUBLIC_DIMENSIONS = [
       {
-        id: 'dim_date', name: 'Calendar Date', category: 'when', icon: '📅',
+        id: 'dim_date', name: 'Calendar Date', category: 'when',
         description: 'Pure calendar date dimension. Use for transaction dates, document dates, due dates, and any date that is not a ledger posting date. Contains fiscal_period_key as a bridge FK to dim_sap_fiscal_calendar — enabling any transaction-grain event to roll up to fiscal periods without re-posting.',
         columns: [
           { name: 'date_key',            dataType: 'INT',     description: 'Surrogate key (YYYYMMDD integer)',                                              isKey: true,  responsibilityType: 'none' },
@@ -519,7 +519,7 @@
         ]
       },
       {
-        id: 'dim_customer', name: 'Customer / Account', category: 'who', icon: '👤',
+        id: 'dim_customer', name: 'Customer / Account', category: 'who',
         description: 'Describes who buys or receives a product or service. Used across sales, service, and billing events.',
         columns: [
           { name: 'customer_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -534,7 +534,7 @@
         ]
       },
       {
-        id: 'dim_product', name: 'Product / Service', category: 'what', icon: '📦',
+        id: 'dim_product', name: 'Product / Service', category: 'what',
         description: 'Describes what is sold, delivered, or consumed. Used across sales, fulfilment, and cost events.',
         columns: [
           { name: 'product_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -549,7 +549,7 @@
         ]
       },
       {
-        id: 'dim_location', name: 'Location / Store', category: 'where', icon: '📍',
+        id: 'dim_location', name: 'Location / Store', category: 'where',
         description: 'Describes where an event takes place — store, site, warehouse, or territory.',
         columns: [
           { name: 'location_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -562,7 +562,7 @@
         ]
       },
       {
-        id: 'dim_employee', name: 'Employee / Person', category: 'who', icon: '🧑',
+        id: 'dim_employee', name: 'Employee / Person', category: 'who',
         description: 'Describes internal staff involved in an event. Supports org hierarchy and responsibility tracking.',
         columns: [
           { name: 'person_key',      dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'org_hierarchy' },
@@ -576,7 +576,7 @@
         ]
       },
       {
-        id: 'dim_cost_centre', name: 'Cost Centre', category: 'where', icon: '🏢',
+        id: 'dim_cost_centre', name: 'Cost Centre', category: 'where',
         description: 'SAP Cost Centre (KOSTL/CSKS) — organisational unit that incurs costs and holds budget authority. Includes SAP-specific category and functional area for different cost centre flavours (Admin, Production, Sales, RE, Statistical).',
         columns: [
           { name: 'cost_centre_key',    dataType: 'UUID',    description: 'Surrogate key',                                    isKey: true,  responsibilityType: 'cost_centre' },
@@ -594,7 +594,7 @@
         ]
       },
       {
-        id: 'dim_gl_account', name: 'GL Account / Chart of Accounts', category: 'what', icon: '📒',
+        id: 'dim_gl_account', name: 'GL Account / Chart of Accounts', category: 'what',
         description: 'General Ledger account structure. Links operational events to financial postings for I&E reconciliation.',
         columns: [
           { name: 'account_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -608,7 +608,7 @@
         ]
       },
       {
-        id: 'dim_org', name: 'Org Unit / Business Unit', category: 'where', icon: '🏦',
+        id: 'dim_org', name: 'Org Unit / Business Unit', category: 'where',
         description: 'Business unit or profit centre with P&L ownership. Supports business area and entity-level reporting.',
         columns: [
           { name: 'org_key',         dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'profit_centre' },
@@ -621,7 +621,7 @@
         ]
       },
       {
-        id: 'dim_campaign', name: 'Campaign / Promotion', category: 'why', icon: '📣',
+        id: 'dim_campaign', name: 'Campaign / Promotion', category: 'why',
         description: 'Marketing or promotional activity driving an event. Enables ROI and campaign attribution analysis.',
         columns: [
           { name: 'campaign_key',    dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -635,7 +635,7 @@
         ]
       },
       {
-        id: 'dim_variance', name: 'Variance / Planning Version', category: 'why', icon: '⚖️',
+        id: 'dim_variance', name: 'Variance / Planning Version', category: 'why',
         description: 'Distinguishes Actual, Budget, Forecast, and Reforecast versions. Essential for Budget vs Actual analysis and budgetary control.',
         columns: [
           { name: 'version_key',     dataType: 'UUID',    description: 'Surrogate key',                      isKey: true,  responsibilityType: 'none' },
@@ -648,7 +648,7 @@
       },
       // ── SAP FI/CO Dimensions ──────────────────────────────────
       {
-        id: 'dim_company_code', name: 'Company Code', category: 'where', icon: '🏛️',
+        id: 'dim_company_code', name: 'Company Code', category: 'where',
         description: 'SAP Company Code (Bukrs) — the legal entity with self-contained financial accounting. Central organisational unit in FI.',
         columns: [
           { name: 'company_code_key',      dataType: 'UUID',    description: 'Surrogate key',                             isKey: true,  responsibilityType: 'company_code' },
@@ -662,7 +662,7 @@
         ]
       },
       {
-        id: 'dim_controlling_area', name: 'Controlling Area', category: 'where', icon: '🎛️',
+        id: 'dim_controlling_area', name: 'Controlling Area', category: 'where',
         description: 'SAP Controlling Area (Kostenrechnungskreis / KOKRS) — the management accounting scope that can span one or more company codes.',
         columns: [
           { name: 'controlling_area_key',        dataType: 'UUID',    description: 'Surrogate key',                              isKey: true,  responsibilityType: 'controlling_area' },
@@ -674,7 +674,7 @@
         ]
       },
       {
-        id: 'dim_profit_centre', name: 'Profit Centre', category: 'where', icon: '💰',
+        id: 'dim_profit_centre', name: 'Profit Centre', category: 'where',
         description: 'SAP Profit Centre (PRCTR) — internal reporting unit within the controlling area, typically aligned to IFRS 8 operating segments.',
         columns: [
           { name: 'profit_centre_key',    dataType: 'UUID',    description: 'Surrogate key',                            isKey: true,  responsibilityType: 'profit_centre' },
@@ -688,7 +688,7 @@
         ]
       },
       {
-        id: 'dim_cost_element', name: 'Cost Element', category: 'what', icon: '🧮',
+        id: 'dim_cost_element', name: 'Cost Element', category: 'what',
         description: 'SAP Cost Element (KSTAR / HKONT) — classifies costs and revenues in CO. Primary cost elements map 1:1 to G/L accounts; secondary are CO-internal.',
         columns: [
           { name: 'cost_element_key',    dataType: 'UUID',    description: 'Surrogate key',                                       isKey: true,  responsibilityType: 'none' },
@@ -702,7 +702,7 @@
         ]
       },
       {
-        id: 'dim_wbs_element', name: 'WBS Element', category: 'where', icon: '🗂️',
+        id: 'dim_wbs_element', name: 'WBS Element', category: 'where',
         description: 'SAP Work Breakdown Structure Element (POSID) — hierarchical project structure node used for CapEx tracking, project controlling, and settlement.',
         columns: [
           { name: 'wbs_key',                   dataType: 'UUID',    description: 'Surrogate key',                           isKey: true,  responsibilityType: 'none' },
@@ -716,7 +716,7 @@
         ]
       },
       {
-        id: 'dim_internal_order', name: 'Internal Order', category: 'why', icon: '📋',
+        id: 'dim_internal_order', name: 'Internal Order', category: 'why',
         description: 'SAP Internal Order (AUFNR) — used to collect and monitor costs for a specific purpose (CapEx, marketing campaigns, maintenance). Settled to cost centres, WBS, or assets.',
         columns: [
           { name: 'order_key',                 dataType: 'UUID',    description: 'Surrogate key',                              isKey: true,  responsibilityType: 'none' },
@@ -730,7 +730,7 @@
         ]
       },
       {
-        id: 'dim_activity_type', name: 'Activity Type', category: 'how', icon: '⚙️',
+        id: 'dim_activity_type', name: 'Activity Type', category: 'how',
         description: 'SAP Activity Type (LSTAR) — defines the type of work performed by a cost centre (e.g. machine hours, labour hours). Used for internal activity allocation and overhead absorption.',
         columns: [
           { name: 'activity_type_key',         dataType: 'UUID',    description: 'Surrogate key',                                  isKey: true,  responsibilityType: 'none' },
@@ -743,7 +743,7 @@
         ]
       },
       {
-        id: 'dim_sap_fiscal_calendar', name: 'SAP Fiscal Calendar', category: 'when', icon: '📅',
+        id: 'dim_sap_fiscal_calendar', name: 'SAP Fiscal Calendar', category: 'when',
         description: 'SAP posting period calendar — one row per fiscal period (posting period + fiscal year). Supports up to 16 periods including special closing periods 13–16.',
         columns: [
           { name: 'period_key',            dataType: 'INT',     description: 'Surrogate key: YYYYPPP format (e.g. 2024001)',  isKey: true,  responsibilityType: 'none' },
@@ -763,7 +763,7 @@
 
       // ── Planning Dimensions ───────────────────────────────
       {
-        id: 'dim_plan_version', name: 'Plan Version', category: 'why', icon: '📋',
+        id: 'dim_plan_version', name: 'Plan Version', category: 'why',
         description: 'Identifies the planning version for a fact row — Budget, Forecast, Latest Best Estimate, or Actuals. Enables actuals vs plan on the same fact table (SAP CO model approach).',
         columns: [
           { name: 'version_key',       dataType: 'INT',     description: 'Surrogate key',                                                                           isKey: true,  responsibilityType: 'none' },
@@ -779,7 +779,7 @@
         ]
       },
       {
-        id: 'dim_phasing_method', name: 'Phasing Method', category: 'how', icon: '〰️',
+        id: 'dim_phasing_method', name: 'Phasing Method', category: 'how',
         description: 'Defines how an over-time operational plan entry is distributed across fiscal periods. Applied to range-plan events to produce period-level phased plan facts for CO transfer.',
         columns: [
           { name: 'phasing_method_key', dataType: 'INT',     description: 'Surrogate key',                                                                          isKey: true,  responsibilityType: 'none' },
@@ -792,7 +792,7 @@
 
       // ── Cost Centre Flavours ──────────────────────────────
       {
-        id: 'dim_investment_order', name: 'Investment / CapEx Order', category: 'why', icon: '🏗️',
+        id: 'dim_investment_order', name: 'Investment / CapEx Order', category: 'why',
         description: 'SAP CO Investment Order (Auftragsar = investment measure) — collects CapEx spend prior to capitalisation on an asset under construction (AuC). Settlement receiver: fixed asset or AuC via FI-AA.',
         columns: [
           { name: 'inv_order_key',             dataType: 'UUID',    description: 'Surrogate key',                                         isKey: true,  responsibilityType: 'none' },
@@ -810,7 +810,7 @@
         ]
       },
       {
-        id: 'dim_statistical_order', name: 'Statistical Internal Order', category: 'why', icon: '📊',
+        id: 'dim_statistical_order', name: 'Statistical Internal Order', category: 'why',
         description: 'SAP Statistical Order — receives informational postings only (no real costs). Used as a secondary receiver alongside a real cost object (cost centre or real order) for sub-classification of spend without affecting settlement.',
         columns: [
           { name: 'stat_order_key',            dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -826,7 +826,7 @@
 
       // ── PS — Project System ───────────────────────────────
       {
-        id: 'dim_ps_project', name: 'PS Project Definition', category: 'why', icon: '🗃️',
+        id: 'dim_ps_project', name: 'PS Project Definition', category: 'why',
         description: 'SAP PS Project Definition (PROJ / PSPID) — the top-level container for all WBS elements, networks and orders within a project. Drives CapEx, professional services, and R&D project tracking.',
         columns: [
           { name: 'project_key',               dataType: 'UUID',    description: 'Surrogate key',                                         isKey: true,  responsibilityType: 'none' },
@@ -846,7 +846,7 @@
 
       // ── PM — Plant Maintenance ────────────────────────────
       {
-        id: 'dim_maintenance_plan', name: 'Maintenance Plan', category: 'how', icon: '🔧',
+        id: 'dim_maintenance_plan', name: 'Maintenance Plan', category: 'how',
         description: 'SAP PM Maintenance Plan (MHIS / MPLA) — defines the schedule for preventive maintenance: cycle, strategy, and task list. Generates maintenance orders automatically on the due date.',
         columns: [
           { name: 'maint_plan_key',            dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -864,7 +864,7 @@
         ]
       },
       {
-        id: 'dim_maintenance_order', name: 'Maintenance Order (PM)', category: 'why', icon: '🔩',
+        id: 'dim_maintenance_order', name: 'Maintenance Order (PM)', category: 'why',
         description: 'SAP PM Maintenance Order (AUFK / AFKO, order category 30) — created manually or automatically from a maintenance plan. Collects labour, material, and external service costs for a specific maintenance task.',
         columns: [
           { name: 'maint_order_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -882,7 +882,7 @@
         ]
       },
       {
-        id: 'dim_service_order', name: 'Service Order (CS)', category: 'why', icon: '🛠️',
+        id: 'dim_service_order', name: 'Service Order (CS)', category: 'why',
         description: 'SAP CS Service Order (AUFK, order category 40) — manages customer-facing repair, field service, and warranty work. Linked to PM objects (equipment/functional location) via the notification, billed via DP90 resource-related billing to an SD billing document, and settled to CO-PA/ACDOCA.',
         columns: [
           { name: 'service_order_key',         dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -919,7 +919,7 @@
         ]
       },
       {
-        id: 'dim_functional_location', name: 'Functional Location (PM)', category: 'where', icon: '📍',
+        id: 'dim_functional_location', name: 'Functional Location (PM)', category: 'where',
         description: 'SAP PM Functional Location (TPLNR / IFLOT) — hierarchical technical structure representing where maintenance is performed (e.g. Plant > Line > Machine > Component). The primary spatial organisation for PM and CS objects.',
         columns: [
           { name: 'func_loc_key',              dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -937,7 +937,7 @@
         ]
       },
       {
-        id: 'dim_equipment', name: 'Equipment (PM)', category: 'what', icon: '⚙️',
+        id: 'dim_equipment', name: 'Equipment (PM)', category: 'what',
         description: 'SAP PM Equipment (EQUNR / EQUI) — an individual physical asset that is maintained independently. Can be installed at a functional location. Drives equipment-level maintenance history, warranty tracking, and mean-time-between-failure analysis.',
         columns: [
           { name: 'equipment_key',             dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -960,7 +960,7 @@
 
       // ── SD — Sales & Distribution ─────────────────────────
       {
-        id: 'dim_sales_order', name: 'Sales Order (SD)', category: 'why', icon: '🧾',
+        id: 'dim_sales_order', name: 'Sales Order (SD)', category: 'why',
         description: 'SAP SD Sales Order (VBAK/VBAP) — the customer demand document. Drives picking, delivery, billing, and revenue recognition. Connects to CO-PA via VBAP profitability segment (PAOBJNR).',
         columns: [
           { name: 'sales_order_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -978,7 +978,7 @@
         ]
       },
       {
-        id: 'dim_sd_contract', name: 'SD Contract / Outline Agreement', category: 'why', icon: '📜',
+        id: 'dim_sd_contract', name: 'SD Contract / Outline Agreement', category: 'why',
         description: 'SAP SD Contract or Scheduling Agreement (VBAK with doc type KK/MK/WK) — a longer-term commitment with a customer defining quantities, prices, and conditions against which release orders are raised.',
         columns: [
           { name: 'contract_key',              dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 'none' },
@@ -998,7 +998,7 @@
 
       // ── RE-FX — Flexible Real Estate ──────────────────────
       {
-        id: 'dim_re_business_entity', name: 'RE Business Entity', category: 'where', icon: '🏙️',
+        id: 'dim_re_business_entity', name: 'RE Business Entity', category: 'where',
         description: 'SAP RE-FX Business Entity (Geschäftseinheit / VIOB00) — the top-level real estate object grouping all properties, buildings, and rental units in an administrative portfolio. Typically represents a geographic or legal portfolio.',
         columns: [
           { name: 're_entity_key',             dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
@@ -1013,7 +1013,7 @@
         ]
       },
       {
-        id: 'dim_re_building', name: 'RE Building', category: 'where', icon: '🏢',
+        id: 'dim_re_building', name: 'RE Building', category: 'where',
         description: 'SAP RE-FX Building (Gebäude / VIOB20) — a physical structure within a property. Buildings contain rental units and are the primary level for maintenance cost assignment, insurance, and structural capex.',
         columns: [
           { name: 're_building_key',           dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
@@ -1033,7 +1033,7 @@
         ]
       },
       {
-        id: 'dim_re_rental_unit', name: 'RE Rental Unit', category: 'where', icon: '🚪',
+        id: 'dim_re_rental_unit', name: 'RE Rental Unit', category: 'where',
         description: 'SAP RE-FX Rental Unit (Mieteinheit / VIOB40) — the smallest separately lettable space within a building. Rental units are the primary object for lease agreements, rent schedules, and vacancy tracking.',
         columns: [
           { name: 're_unit_key',               dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },
@@ -1051,7 +1051,7 @@
         ]
       },
       {
-        id: 'dim_re_rental_agreement', name: 'RE Rental/Lease Agreement', category: 'why', icon: '📝',
+        id: 'dim_re_rental_agreement', name: 'RE Rental/Lease Agreement', category: 'why',
         description: 'SAP RE-FX Rental Agreement (Mietvertrag / VIAUFNR / VIRE00) — the lease contract between landlord and tenant. Drives periodic rent posting, indexation, option management, and security deposit tracking. In S/4 RE-FX, IFRS 16 right-of-use asset calculations are embedded.',
         columns: [
           { name: 're_agreement_key',          dataType: 'UUID',    description: 'Surrogate key',                                          isKey: true,  responsibilityType: 're_object' },

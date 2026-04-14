@@ -34,7 +34,7 @@ const Projects = {
     return `
       <div class="card project-card" onclick="Router.navigate('project/${project.id}')">
         <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
         </div>
         <div class="card-body">
           <h3 class="card-title">${this._esc(project.name)}</h3>
@@ -155,13 +155,13 @@ const Projects = {
     const warnings = [
       naCount > 0 ? `<span class="additive-badge additive-na">${naCount} NA</span>` : '',
       saCount > 0 ? `<span class="additive-badge additive-sa">${saCount} SA</span>` : '',
-      bcCount > 0 ? `<span style="font-size:10px;color:#7c3aed">💰${bcCount}</span>` : ''
+      bcCount > 0 ? `<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:1px 4px;letter-spacing:.04em">B${bcCount}</span>` : ''
     ].filter(Boolean).join(' ');
 
     return `
       <div class="card event-card" onclick="Projects.renderEventDetail('${projectId}', '${event.id}')">
         <div class="card-icon event-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 12h6M9 16h4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="3" y="4" width="18" height="17"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="10" x2="9" y2="21"/><line x1="15" y1="10" x2="15" y2="21"/></svg>
         </div>
         <div class="card-body">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
@@ -440,11 +440,11 @@ const Projects = {
             <div class="conformed-readonly-source">
               Foreign key →
               ${dim
-                ? `<a href="#dimension/${dim.id}" style="color:var(--info);font-weight:600">${dim.icon ? dim.icon + ' ' : ''}${this._esc(dim.name)}</a>`
+                ? `<a href="#dimension/${dim.id}" style="color:var(--info);font-weight:600">${this._esc(dim.name)}</a>`
                 : `<span style="color:var(--text-muted)">Dimension (template removed)</span>`}
             </div>
             <div class="conformed-readonly-name" style="display:flex;align-items:center;gap:8px">
-              🔑 <span>${this._esc(col.name || '—')}</span>
+              <span class="key-indicator">PK</span> <span>${this._esc(col.name || '—')}</span>
               <span style="font-size:12px;font-weight:400;color:var(--text-muted)">${this._esc(col.dataType || 'INT')}</span>
             </div>
           </div>
@@ -497,7 +497,7 @@ const Projects = {
                 const isKey = c.isKey || c.isSurrogateKey || c.id === col.publicDimensionColId;
                 const atCatInfo = (typeof CATEGORIES !== 'undefined' && CATEGORIES[c.category]) || null;
                 return `<div class="conformed-dim-attr-row${isKey ? ' conformed-dim-attr-row-key' : ''}">
-                  <span class="conformed-dim-attr-key">${isKey ? '🔑' : ''}</span>
+                  <span class="conformed-dim-attr-key">${isKey ? '<span class="key-indicator" style="font-size:9px;padding:1px 4px">PK</span>' : ''}</span>
                   <span class="conformed-dim-attr-name">${this._esc(c.name)}</span>
                   <span class="conformed-dim-attr-type">${c.dataType || 'VARCHAR'}</span>
                   ${atCatInfo ? `<span class="conformed-dim-attr-cat" style="color:${atCatInfo.color}">${atCatInfo.label}</span>` : ''}
@@ -990,7 +990,7 @@ const Projects = {
         </div>
         ${col.isConformed && linked ? `
         <div class="conformed-link-badge" style="margin-top:12px">
-          <svg viewBox="0 0 16 16" fill="currentColor" style="width:13px;height:13px"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.2 5.5l-3.7 3.7a.75.75 0 01-1.06 0L4.8 8.5a.75.75 0 011.06-1.06l1.1 1.1 3.18-3.18a.75.75 0 111.06 1.06z"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" style="width:13px;height:13px"><polyline points="2,8 6,13 14,4"/></svg>
           Conformed — ${this._esc(linked.name)}${linkedDimCol ? ' › ' + this._esc(linkedDimCol.name) : ''}
           <a href="#dimension/${linked.id}" style="margin-left:6px;font-size:11px;font-weight:400;color:var(--info)">View template →</a>
           <button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px;margin-left:auto"
@@ -1332,7 +1332,7 @@ const Projects = {
       <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-top:6px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1d4ed8;margin-bottom:8px">FK column added to event</div>
         <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#dbeafe;border-radius:4px;margin-bottom:10px">
-          <span style="font-size:13px">🔑</span>
+          <span class="key-indicator">PK</span>
           <span style="font-weight:600;color:#1e3a8a;font-size:13px">${keyCol ? Projects._esc(keyCol.name) : '—'}</span>
           <span style="color:#3b82f6;font-size:11px">${keyCol ? (keyCol.dataType || 'INT') : ''}</span>
         </div>

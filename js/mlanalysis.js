@@ -2,6 +2,21 @@
 // ML_TAGS and ML_PATTERNS are defined as globals in index.html
 const MLAnalysis = {
 
+  // ── Metro flat SVG icons per ML pattern (no emoji) ─────────────────────────
+  _patternIcon(patternKey) {
+    const icons = {
+      time_series:    `<polyline points="2,18 7,10 12,14 17,6 22,10"/><line x1="2" y1="21" x2="22" y2="21"/>`,
+      churn:          `<rect x="3" y="3" width="12" height="18"/><polyline points="16,9 22,12 16,15"/><line x1="10" y1="12" x2="22" y2="12"/>`,
+      recommendation: `<rect x="3" y="3" width="18" height="18"/><rect x="8" y="8" width="8" height="8"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/>`,
+      anomaly:        `<polygon points="12,3 22,20 2,20"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
+      segmentation:   `<rect x="2" y="4" width="5" height="5"/><rect x="1" y="13" width="7" height="8"/><rect x="17" y="4" width="5" height="5"/><rect x="16" y="13" width="7" height="8"/>`,
+      demand:         `<rect x="4" y="9" width="16" height="12"/><polyline points="4,9 12,4 20,9"/><line x1="12" y1="4" x2="12" y2="21"/>`,
+    };
+    const inner = icons[patternKey] || icons.time_series;
+    const color = (ML_PATTERNS[patternKey] || {}).color || '#767676';
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" style="width:32px;height:32px">${inner}</svg>`;
+  },
+
   // ── Project picker ──────────────────────────────────────────────────────────
   renderProjectPicker() {
     const data = Storage.load();
@@ -204,7 +219,7 @@ const MLAnalysis = {
     return `
       <div class="ml-pattern-card card">
         <div class="card-body">
-          <div class="ml-pattern-icon">${pattern.icon}</div>
+          <div class="ml-pattern-icon">${this._patternIcon(p.patternKey)}</div>
           <div style="font-size:13px;font-weight:700;color:${pattern.color};margin-bottom:2px">
             ${this._esc(pattern.label)}
           </div>
@@ -235,8 +250,8 @@ const MLAnalysis = {
       (event.columns || []).filter(c => c.category === 'how_many').forEach(col => {
         const addType = ADDITIVE_TYPES[col.additiveType] || ADDITIVE_TYPES.fully_additive;
         const patternsForEvent = (eventPatterns[event.id] || [])
-          .map(k => ML_PATTERNS[k])
-          .filter(Boolean);
+          .map(k => ({ key: k, ...(ML_PATTERNS[k] || {}) }))
+          .filter(p => p.label);
 
         rows.push(`
           <tr>
@@ -260,7 +275,7 @@ const MLAnalysis = {
               ${patternsForEvent.length
                 ? patternsForEvent.map(pat =>
                     `<span class="ml-tag-badge" style="background:${pat.color}15;color:${pat.color};border:1px solid ${pat.color}30">
-                       ${pat.icon} ${this._esc(pat.label)}
+                       ${this._patternIcon(pat.key)} ${this._esc(pat.label)}
                      </span>`
                   ).join(' ')
                 : `<span style="color:var(--text-subtle);font-size:11px">—</span>`

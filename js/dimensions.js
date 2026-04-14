@@ -3,6 +3,23 @@ const DimensionLibrary = {
   // ── In-memory state for the editor ───────────────────────
   _editorState: null,
 
+  // ── Metro flat category icon (replaces emoji icons) ───────
+  // Each 7W category maps to a flat geometric SVG — no circles,
+  // no organic curves, square stroke caps throughout (Metro).
+  _categoryIcon(category) {
+    const paths = {
+      who:      `<rect x="9" y="3" width="6" height="6"/><rect x="5" y="14" width="14" height="7"/>`,
+      what:     `<polyline points="3,8 12,3 21,8"/><rect x="3" y="8" width="18" height="12"/>`,
+      when:     `<rect x="3" y="4" width="18" height="17"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>`,
+      where:    `<rect x="7" y="2" width="10" height="10"/><polyline points="7,12 12,21 17,12"/>`,
+      how:      `<rect x="2" y="9" width="5" height="6"/><rect x="10" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/><line x1="7" y1="12" x2="10" y2="12"/><line x1="15" y1="12" x2="17" y2="12"/>`,
+      why:      `<polygon points="12,2 22,12 12,22 2,12"/>`,
+      how_many: `<line x1="3" y1="21" x2="21" y2="21"/><rect x="4" y="15" width="3" height="6"/><rect x="10" y="10" width="3" height="11"/><rect x="16" y="6" width="3" height="15"/>`,
+    };
+    const inner = paths[category] || paths.who;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" style="width:20px;height:20px">${inner}</svg>`;
+  },
+
   // ── List view ─────────────────────────────────────────────
 
   renderList() {
@@ -56,7 +73,7 @@ const DimensionLibrary = {
     return `
       <div class="dim-card" onclick="Router.navigate('dimension/${dim.id}')">
         <div class="dim-card-header">
-          <div class="dim-card-icon">${dim.icon || '📋'}</div>
+          <div class="dim-card-icon" style="background:${cat.color || '#767676'};color:#fff">${this._categoryIcon(dim.category)}</div>
           <div>
             <div class="dim-card-title">${this._esc(dim.name)}</div>
             <div class="dim-card-category">
@@ -84,7 +101,7 @@ const DimensionLibrary = {
     return `
       <div class="dim-card dim-card-custom" onclick="Router.navigate('dimension/${dim.id}')">
         <div class="dim-card-header">
-          <div class="dim-card-icon">${dim.icon || '📋'}</div>
+          <div class="dim-card-icon" style="background:${cat.color || '#767676'};color:#fff">${this._categoryIcon(dim.category)}</div>
           <div style="flex:1;min-width:0">
             <div class="dim-card-title">${this._esc(dim.name)}</div>
             <div class="dim-card-category" style="display:flex;align-items:center;gap:6px">
@@ -130,7 +147,9 @@ const DimensionLibrary = {
 
       <div class="project-meta">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-          <span style="font-size:28px">${dim.icon || '📋'}</span>
+          <div style="width:48px;height:48px;background:${cat.color || '#767676'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" style="width:28px;height:28px">${({"who":`<rect x="9" y="3" width="6" height="6"/><rect x="5" y="14" width="14" height="7"/>`,"what":`<polyline points="3,8 12,3 21,8"/><rect x="3" y="8" width="18" height="12"/>`,"when":`<rect x="3" y="4" width="18" height="17"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>`,"where":`<rect x="7" y="2" width="10" height="10"/><polyline points="7,12 12,21 17,12"/>`,"how":`<rect x="2" y="9" width="5" height="6"/><rect x="10" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/><line x1="7" y1="12" x2="10" y2="12"/><line x1="15" y1="12" x2="17" y2="12"/>`,"why":`<polygon points="12,2 22,12 12,22 2,12"/>`,"how_many":`<line x1="3" y1="21" x2="21" y2="21"/><rect x="4" y="15" width="3" height="6"/><rect x="10" y="10" width="3" height="11"/><rect x="16" y="6" width="3" height="15"/>`})[dim.category] || `<rect x="9" y="3" width="6" height="6"/><rect x="5" y="14" width="14" height="7"/>`}</svg>
+          </div>
           <h1 class="view-title" style="margin:0">${this._esc(dim.name)}</h1>
           <span class="badge-sm" style="background:${cat.color || '#6b7280'}">${cat.label || dim.category} dimension</span>
           ${dim.isCustom ? '<span class="dim-card-custom-badge">Custom</span>' : ''}
@@ -247,10 +266,10 @@ const DimensionLibrary = {
             <input class="form-input" id="dimName" value="${this._esc(dim.name)}"
               placeholder="e.g. Vendor / Supplier" maxlength="80">
           </div>
-          <div class="form-group">
-            <label class="form-label">Icon <span class="optional">(emoji)</span></label>
-            <input class="form-input" id="dimIcon" value="${this._esc(dim.icon || '')}"
-              placeholder="🏭" style="max-width:80px">
+          <div class="form-group" style="display:flex;flex-direction:column;gap:4px">
+            <label class="form-label">Category Icon</label>
+            <div id="dimIconPreview" style="width:36px;height:36px;background:${(CATEGORIES[dim.category]||{}).color||'#767676'};display:flex;align-items:center;justify-content:center;color:#fff">${this._categoryIcon(dim.category)}</div>
+            <span style="font-size:10px;color:var(--text-subtle)">Set by category</span>
           </div>
           <div class="form-group">
             <label class="form-label">7W Category <span class="required">*</span></label>
