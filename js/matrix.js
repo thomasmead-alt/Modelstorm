@@ -503,6 +503,32 @@ const Matrix = {
     this.renderEvent(eventId);
   },
 
+  // Solution-gap management (Phase 7)
+  _addGap(eventId) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { event, project } = found;
+    Storage.addGap(project.id, event.id, {});
+    this.renderEvent(eventId);
+  },
+
+  _updateGap(eventId, gapId, field, value) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { project } = found;
+    Storage.updateGap(project.id, eventId, gapId, field, value);
+    // Re-render only when status/kind change so colour swatches refresh
+    if (field === 'status' || field === 'kind') this.renderEvent(eventId);
+  },
+
+  _deleteGap(eventId, gapId) {
+    const found = Storage.getEvent(eventId);
+    if (!found) return;
+    const { project } = found;
+    Storage.deleteGap(project.id, eventId, gapId);
+    this.renderEvent(eventId);
+  },
+
   _formatPlaceholder(dataType) {
     switch (dataType) {
       case 'VARCHAR': case 'TEXT': return 'e.g. Value1, Value2, Value3';
@@ -582,6 +608,39 @@ const Matrix = {
       : '';
     const isOverTime = temporal === 'overTime';
 
+    // FI/CO pattern (archetype, SAP anchors, gaps) — Phase 7
+    const archetypes = (typeof Storage !== 'undefined' && Storage.getAllArchetypes)
+      ? Storage.getAllArchetypes(project) : [];
+    const archetype = archetypes.find(a => a.id === event.archetypeId) || null;
+    const builtInArchs = archetypes.filter(a => !a.isCustom);
+    const customArchs  = archetypes.filter(a =>  a.isCustom);
+    const archOpts =
+      `<option value="">— Unclassified —</option>` +
+      (builtInArchs.length ? `<optgroup label="Built-in">` +
+        builtInArchs.map(a => `<option value="${a.id}" ${event.archetypeId === a.id ? 'selected' : ''}>${this._esc(a.label)}</option>`).join('') +
+        `</optgroup>` : '') +
+      (customArchs.length ? `<optgroup label="Project custom">` +
+        customArchs.map(a => `<option value="${a.id}" ${event.archetypeId === a.id ? 'selected' : ''}>${this._esc(a.label)}</option>`).join('') +
+        `</optgroup>` : '');
+
+    const sapModule = event.sapModule || '';
+    const moduleOpts = `<option value="">— Select module —</option>` +
+      (typeof SAP_MODULES !== 'undefined'
+        ? SAP_MODULES.map(m => `<option value="${m}" ${sapModule === m ? 'selected' : ''}>${m}</option>`).join('')
+        : '');
+
+    const postingPattern = event.postingPattern || '';
+    const postingOpts = `<option value="">— Select pattern —</option>` +
+      (typeof POSTING_PATTERNS !== 'undefined'
+        ? Object.entries(POSTING_PATTERNS).map(([k, p]) =>
+            `<option value="${k}" ${postingPattern === k ? 'selected' : ''}>${p.label}</option>`).join('')
+        : '');
+
+    const gapKindDict   = (typeof GAP_KINDS    !== 'undefined') ? GAP_KINDS    : {};
+    const gapStatusDict = (typeof GAP_STATUSES !== 'undefined') ? GAP_STATUSES : {};
+    const gaps = event.solutionGaps || [];
+    const openGapCount = gaps.filter(g => g.status === 'open' || g.status === 'designing').length;
+
     // Health warnings
     const whenCols = event.columns.filter(c => c.category === 'when');
     const anchorCols = whenCols.filter(c => c.isFinancialAnchor);
@@ -601,6 +660,12 @@ const Matrix = {
       if (!hasPlanStart || !hasPlanEnd) {
         warnings.push(`<span class="event-health-warn">⚠ Over-time event needs both <em>plan_start_period</em> and <em>plan_end_period</em> date FKs</span>`);
       }
+    }
+    if (archetype && archetype.module && sapModule && archetype.module !== sapModule) {
+      warnings.push(`<span class="event-health-warn">⚠ Archetype expects module <em>${this._esc(archetype.module)}</em> but event is set to <em>${this._esc(sapModule)}</em></span>`);
+    }
+    if (archetype && !sapModule) {
+      warnings.push(`<span class="event-health-warn">⚠ Archetype set — consider picking an SAP module (<em>${this._esc(archetype.module || '—')}</em> typical)</span>`);
     }
     const warningsHtml = warnings.length
       ? `<div class="event-health-warnings">${warnings.join('')}</div>`
@@ -694,13 +759,89 @@ const Matrix = {
             </div>
           `).join('')}
         </div>
+
+        <div class="meta-field">
+          <label>FI/CO Archetype</label>
+          <select onchange="Matrix.updateEventField('${event.id}', 'archetypeId', this.value)">
+            ${archOpts}
+          </select>
+          ${archetype ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">
+            ${this._esc(archetype.description || '')}
+            ${archetype.typicalTables ? `<br><em>Typical tables:</em> <code>${this._esc(archetype.typicalTables)}</code>` : ''}
+            ${archetype.typicalDocType ? ` &nbsp; <em>Doc type:</em> <code>${this._esc(archetype.typicalDocType)}</code>` : ''}
+          </span>` : `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">Classify this event against a built-in SAP FI/CO pattern (or add a project-specific one under <a href="#ficopatterns/${project.id}" style="color:var(--info)">FI/CO Patterns →</a>).</span>`}
+        </div>
+        <div class="meta-field">
+          <label>SAP Module</label>
+          <select onchange="Matrix.updateEventField('${event.id}', 'sapModule', this.value)">
+            ${moduleOpts}
+          </select>
+          ${archetype && archetype.module ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">Archetype typical: <strong>${this._esc(archetype.module)}</strong></span>` : ''}
+        </div>
+        <div class="meta-field">
+          <label>SAP Process / T-code</label>
+          <input class="cell-input" style="font-size:12px" placeholder="e.g. KSU5 Assessment, VF01 Billing"
+            value="${this._esc(event.sapProcess || '')}"
+            onblur="Matrix.updateEventField('${event.id}', 'sapProcess', this.value)">
+        </div>
+        <div class="meta-field">
+          <label>SAP Doc Type</label>
+          <input class="cell-input" style="font-size:12px;font-family:monospace" placeholder="e.g. SA, RV, AA"
+            value="${this._esc(event.sapDocType || '')}"
+            onblur="Matrix.updateEventField('${event.id}', 'sapDocType', this.value)">
+        </div>
+        <div class="meta-field">
+          <label>Posting Pattern</label>
+          <select onchange="Matrix.updateEventField('${event.id}', 'postingPattern', this.value)">
+            ${postingOpts}
+          </select>
+          ${postingPattern && typeof POSTING_PATTERNS !== 'undefined' && POSTING_PATTERNS[postingPattern]
+            ? `<span style="font-size:10px;color:var(--text-subtle);margin-top:2px">${this._esc(POSTING_PATTERNS[postingPattern].description)}</span>` : ''}
+        </div>
+
+        <div class="meta-field meta-field-full">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label style="margin-bottom:0">Solution Gaps — where standard SAP is inadequate</label>
+            <button class="btn-sm" onclick="Matrix._addGap('${event.id}')">+ Add Gap</button>
+          </div>
+          ${gaps.length === 0 ? `<div style="font-size:11px;color:var(--text-subtle)">No gaps flagged. Use this to document where standard SAP doesn't deliver — BADI/BTE needs, missing COPA characteristics, cycle limitations, performance workarounds, etc.</div>` : ''}
+          ${gaps.map(g => {
+            const kindInfo   = gapKindDict[g.kind]   || { label: g.kind,   color: '#475569', bg: '#f1f5f9' };
+            const statusInfo = gapStatusDict[g.status] || { label: g.status, color: '#475569', bg: '#f1f5f9' };
+            const kindOpts = Object.entries(gapKindDict).map(([k, v]) =>
+              `<option value="${k}" ${g.kind === k ? 'selected' : ''}>${this._esc(v.label)}</option>`).join('');
+            const statusOpts = Object.entries(gapStatusDict).map(([k, v]) =>
+              `<option value="${k}" ${g.status === k ? 'selected' : ''}>${this._esc(v.label)}</option>`).join('');
+            return `
+              <div class="gap-row" data-gap-id="${g.id}">
+                <select class="cell-select gap-kind" style="flex:1.2;font-size:12px;background:${kindInfo.bg};color:${kindInfo.color}"
+                  onchange="Matrix._updateGap('${event.id}', '${g.id}', 'kind', this.value)">
+                  ${kindOpts}
+                </select>
+                <input class="cell-input" style="flex:1.3;font-size:12px" placeholder="SAP object (e.g. COPA value field, KSU5 cycle)"
+                  value="${this._esc(g.sapObject || '')}" onblur="Matrix._updateGap('${event.id}', '${g.id}', 'sapObject', this.value)">
+                <input class="cell-input" style="flex:1.5;font-size:12px" placeholder="Current workaround"
+                  value="${this._esc(g.currentWorkaround || '')}" onblur="Matrix._updateGap('${event.id}', '${g.id}', 'currentWorkaround', this.value)">
+                <input class="cell-input" style="flex:1.5;font-size:12px" placeholder="Target solution (BADI / custom / …)"
+                  value="${this._esc(g.targetSolution || '')}" onblur="Matrix._updateGap('${event.id}', '${g.id}', 'targetSolution', this.value)">
+                <select class="cell-select gap-status" style="flex:0.8;font-size:12px;background:${statusInfo.bg};color:${statusInfo.color}"
+                  onchange="Matrix._updateGap('${event.id}', '${g.id}', 'status', this.value)">
+                  ${statusOpts}
+                </select>
+                <button class="btn-icon" onclick="Matrix._deleteGap('${event.id}', '${g.id}')" title="Remove gap" style="color:var(--danger)">✕</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
         <div class="meta-field" style="margin-left:auto;text-align:right">
           <label>KPI Notes</label>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.8">
             ${naCount > 0 ? `<span class="additive-badge additive-na" style="margin-right:4px">${naCount} Non-Additive</span>` : ''}
             ${saCount > 0 ? `<span class="additive-badge additive-sa" style="margin-right:4px">${saCount} Semi-Additive</span>` : ''}
             ${bcCount > 0 ? `<span style="font-size:11px;color:#7c3aed">💰 ${bcCount} budget-controlled</span>` : ''}
-            ${naCount === 0 && saCount === 0 && bcCount === 0 ? '<span style="color:var(--text-subtle);font-size:11px">All measures fully additive</span>' : ''}
+            ${openGapCount > 0 ? `<span class="additive-badge gap-open-badge" style="margin-left:4px">${openGapCount} open gap${openGapCount !== 1 ? 's' : ''}</span>` : ''}
+            ${naCount === 0 && saCount === 0 && bcCount === 0 && openGapCount === 0 ? '<span style="color:var(--text-subtle);font-size:11px">All measures fully additive · no open gaps</span>' : ''}
           </div>
         </div>
       </div>

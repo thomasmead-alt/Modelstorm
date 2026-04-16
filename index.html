@@ -142,6 +142,15 @@
         <span class="nav-label">SAP Migration</span>
       </a>
 
+      <a class="nav-item" data-section="ficopatterns" data-tip="FI/CO Patterns" href="#ficopatterns">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+          <polygon points="12 2 22 12 12 22 2 12"/>
+          <line x1="12" y1="7" x2="12" y2="17"/>
+          <line x1="7" y1="12" x2="17" y2="12"/>
+        </svg>
+        <span class="nav-label">FI/CO Patterns</span>
+      </a>
+
       <a class="nav-item" data-section="hierarchies" data-tip="Hierarchy Library" href="#hierarchies">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
           <rect x="9" y="2" width="6" height="5"/>
@@ -228,6 +237,7 @@
   <script src="js/mlanalysis.js"></script>
   <script src="js/ddlgen.js"></script>
   <script src="js/sapmigration.js"></script>
+  <script src="js/ficopatterns.js"></script>
   <script src="js/hierarchy.js"></script>
 
   <script>
@@ -251,6 +261,55 @@
       financial_plan:   { label: 'Financial Plan',    short: 'FPL', description: 'Period-level consolidated plan ready for CO controlling objects and reporting — output of phasing', color: '#0369a1', bg: '#e0f2fe' },
       forecast:         { label: 'Forecast',          short: 'FC',  description: 'Re-projected estimate during the year — blends actuals YTD with forward-looking assumptions', color: '#d97706', bg: '#fef3c7' },
       budget:           { label: 'Budget',            short: 'BUD', description: 'Annual budget baseline — fixed reference point for variance analysis', color: '#059669', bg: '#ecfdf5' }
+    };
+
+    // ─── Global constants: FI/CO event archetypes (Phase 7) ─
+    // Seed list of SAP FI/CO process patterns an event can belong to.
+    // Projects can add their own via customArchetypes (see storage.js).
+    const ARCHETYPES = [
+      { id: 'billing_revenue',         label: 'Billing / Revenue Posting',      module: 'SD',              typicalTables: 'VBRK, VBRP, ACDOCA', typicalDocType: 'RV', color: '#10b981', description: 'Customer invoice / credit memo generating SD → FI → CO-PA postings.' },
+      { id: 'goods_movement',          label: 'Goods Movement / Inventory',     module: 'MM',              typicalTables: 'MSEG, MKPF, ACDOCA',  typicalDocType: 'WA/WE', color: '#6366f1', description: 'Material receipts, issues, transfers — inventory + COGS postings.' },
+      { id: 'assessment_distribution', label: 'Assessment / Distribution',      module: 'CO-OM',           typicalTables: 'COEP, ACDOCA',       typicalDocType: 'CO', color: '#f59e0b', description: 'Cost centre assessment (KSU5) or distribution (KSV5) cycle run.' },
+      { id: 'order_wbs_settlement',    label: 'Order / WBS Settlement',         module: 'CO-OM',           typicalTables: 'AUFK, COBK, ACDOCA', typicalDocType: 'AA', color: '#8b5cf6', description: 'Internal order or WBS element settlement to cost centre / AuC / COPA.' },
+      { id: 'accrual_deferral',        label: 'Accrual / Deferral Posting',     module: 'FI',              typicalTables: 'BKPF, BSEG, ACDOCA', typicalDocType: 'SA/AB', color: '#0ea5e9', description: 'Manual or automated accrual / deferral (FBS1 / ACACACT run).' },
+      { id: 'fx_revaluation',          label: 'Foreign-Currency Revaluation',   module: 'FI',              typicalTables: 'ACDOCA, BSEG',       typicalDocType: 'SA', color: '#06b6d4', description: 'Period-end FX revaluation of open items / balances (FAGL_FCV / F.05).' },
+      { id: 'depreciation_run',        label: 'Depreciation Run',               module: 'AA',              typicalTables: 'ANLP, ANLC, ACDOCA', typicalDocType: 'AF', color: '#ef4444', description: 'Monthly depreciation posting (AFAB) for fixed assets.' },
+      { id: 'wip_results_analysis',    label: 'WIP / Results Analysis',         module: 'CO-PC',           typicalTables: 'KKBC, ACDOCA',       typicalDocType: 'WI', color: '#ec4899', description: 'Work-in-progress valuation or results analysis at period end (KKAO / KKS1).' },
+      { id: 'copa_realignment',        label: 'CO-PA Realignment / Top-down',   module: 'CO-PA',           typicalTables: 'ACDOCA, CE1xxxx',    typicalDocType: 'KE', color: '#d946ef', description: 'CO-PA top-down distribution (KE28) or realignment (KEND).' },
+      { id: 'manual_journal',          label: 'Manual Journal / Adjustment',    module: 'FI',              typicalTables: 'BKPF, BSEG, ACDOCA', typicalDocType: 'SA', color: '#64748b', description: 'Manual FI posting for adjustments, reclassifications, corrections.' },
+      { id: 'period_close_step',       label: 'Period-Close Step',              module: 'Group Reporting', typicalTables: 'ACDOCA, ACDOCU',     typicalDocType: '—',  color: '#475569', description: 'Scheduled close activity (lock period, consolidation unit, elimination).' }
+    ];
+
+    // ─── Global constants: SAP modules ────────────────────
+    const SAP_MODULES = [
+      'FI', 'CO-OM', 'CO-PA', 'CO-PC', 'AA', 'PS', 'SD', 'MM', 'TR', 'RE-FX', 'Group Reporting'
+    ];
+
+    // ─── Global constants: posting patterns ───────────────
+    const POSTING_PATTERNS = {
+      actual:      { label: 'Actual',      description: 'Real financial posting to the ledger' },
+      statistical: { label: 'Statistical', description: 'Informational posting — does not settle (e.g. statistical internal order)' },
+      plan:        { label: 'Plan',        description: 'Plan value uploaded to CO planning (KP06/KP26/CJ40)' },
+      commitment:  { label: 'Commitment',  description: 'Commitment posting (PO, purchase requisition, funds reservation)' },
+      memo:        { label: 'Memo',        description: 'Memo / reference posting only — no GL impact' }
+    };
+
+    // ─── Global constants: solution-gap kinds ─────────────
+    const GAP_KINDS = {
+      not_supported:       { label: 'Not supported by SAP',       color: '#991b1b', bg: '#fee2e2', description: 'Standard SAP does not cover this requirement at all.' },
+      needs_enhancement:   { label: 'Needs enhancement (BADI/BTE)', color: '#9a3412', bg: '#ffedd5', description: 'Requires an enhancement spot, BADI, BTE or user exit.' },
+      custom_dev:          { label: 'Custom development',         color: '#7c2d12', bg: '#fef3c7', description: 'Requires a bespoke program, CDS view or add-on.' },
+      workaround:          { label: 'Workaround in place',        color: '#78350f', bg: '#fef9c3', description: 'A non-standard process or manual step fills the gap.' },
+      performance:         { label: 'Performance issue',          color: '#1e40af', bg: '#dbeafe', description: 'Standard solution exists but does not perform at required volume.' },
+      data_model_mismatch: { label: 'Data model mismatch',        color: '#5b21b6', bg: '#ede9fe', description: 'SAP structure does not match the business model (e.g. missing characteristic).' }
+    };
+
+    // ─── Global constants: solution-gap statuses ──────────
+    const GAP_STATUSES = {
+      open:        { label: 'Open',        color: '#991b1b', bg: '#fee2e2' },
+      designing:   { label: 'In design',   color: '#9a3412', bg: '#ffedd5' },
+      implemented: { label: 'Implemented', color: '#166534', bg: '#dcfce7' },
+      deferred:    { label: 'Deferred',    color: '#475569', bg: '#f1f5f9' }
     };
 
     // ─── Global constants: phasing methods ────────────────
@@ -1324,6 +1383,8 @@
     Router.register('ddl/:id',                ({ id }) => DDLGen.render(id));
     Router.register('sap-migration',          ()       => SapMigration.renderProjectPicker());
     Router.register('sap-migration/:id',      ({ id }) => SapMigration.render(id));
+    Router.register('ficopatterns',           ()       => FiCoPatterns.renderProjectPicker());
+    Router.register('ficopatterns/:id',       ({ id }) => FiCoPatterns.render(id));
     Router.register('hierarchies',            ()       => HierarchyEditor.renderList());
     Router.register('hierarchy-editor/:id',   ({ id }) => HierarchyEditor.render(id));
     Router.register('recents',  () => renderRecents());

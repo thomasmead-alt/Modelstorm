@@ -2022,6 +2022,27 @@ body.sidebar-collapsed #content { margin-left: var(--sidebar-width-collapsed); }
 }
 .gl-mapping-row:last-child { border-bottom: none; }
 
+/* ── Solution-gap rows (FI/CO patterns, Phase 7) ────────── */
+.gap-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+}
+.gap-row:last-child { border-bottom: none; }
+.gap-row .cell-input,
+.gap-row .cell-select { min-width: 0; }
+.gap-row .gap-kind,
+.gap-row .gap-status {
+  font-weight: 600; border-radius: 4px;
+}
+.gap-open-badge {
+  background: #fee2e2; color: #991b1b;
+}
+
+/* ── FI/CO Patterns page tabs + cards ───────────────────── */
+.fico-tab-btn { font-weight: 500; }
+.archetype-card { transition: box-shadow 0.15s ease; }
+.archetype-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
 /* ── Anchor badge + GL badge in column name cell ─────────  */
 .anchor-badge {
   display: inline-flex; align-items: center; font-size: 11px;

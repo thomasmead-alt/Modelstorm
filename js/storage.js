@@ -35,6 +35,8 @@ const Storage = {
     if (!p.responsibilityRegister) p.responsibilityRegister = [];
     // Phase 5: SAP cost object register (replaces people-based register)
     if (!p.costObjects) p.costObjects = [];
+    // Phase 7: FI/CO patterns — user-added archetypes on top of the built-in seed
+    if (!p.customArchetypes) p.customArchetypes = [];
     // Phase 5: P&L line GL account ranges (migrate per-line if customised)
     if (p.plLines) {
       p.plLines = p.plLines.map(line => {
@@ -60,6 +62,13 @@ const Storage = {
       if (!e.subledgers)    e.subledgers    = [];
       // Phase 6: event-level notes / KPI context
       if (!e.notes) e.notes = '';
+      // Phase 7: FI/CO pattern — archetype + SAP process anchors + solution-gap register
+      if (!e.archetypeId)    e.archetypeId    = '';
+      if (!e.sapModule)      e.sapModule      = '';
+      if (!e.sapProcess)     e.sapProcess     = '';
+      if (!e.sapDocType)     e.sapDocType     = '';
+      if (!e.postingPattern) e.postingPattern = '';
+      if (!e.solutionGaps)   e.solutionGaps   = [];
 
       e.columns = (e.columns || []).map(col => {
         // Phase 2: additivity, budget, responsibility, conformed dims
@@ -454,6 +463,104 @@ const Storage = {
     const event = (project.events || []).find(e => e.id === eventId);
     if (!event) return;
     event.glMappings = (event.glMappings || []).filter(m => m.id !== mappingId);
+    this.save(data);
+  },
+
+  // ── Archetype helpers (Phase 7 — FI/CO patterns) ─────────
+
+  // Returns built-in seed archetypes + project-level custom entries
+  getAllArchetypes(project) {
+    const builtIns = (typeof ARCHETYPES !== 'undefined' ? ARCHETYPES : [])
+      .map(a => ({ ...a, isCustom: false }));
+    const custom = (project && project.customArchetypes || [])
+      .map(a => ({ ...a, isCustom: true }));
+    return [...builtIns, ...custom];
+  },
+
+  addCustomArchetype(projectId, entry) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return null;
+    if (!project.customArchetypes) project.customArchetypes = [];
+    const row = {
+      id: entry.id || this.generateId(),
+      label: entry.label || '',
+      module: entry.module || '',
+      typicalTables: entry.typicalTables || '',
+      typicalDocType: entry.typicalDocType || '',
+      description: entry.description || ''
+    };
+    project.customArchetypes.push(row);
+    this.save(data);
+    return row;
+  },
+
+  updateCustomArchetype(projectId, id, patch) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const row = (project.customArchetypes || []).find(a => a.id === id);
+    if (!row) return;
+    Object.assign(row, patch);
+    this.save(data);
+  },
+
+  // Returns { ok, reason, usedBy } — blocks deletion if events reference it
+  deleteCustomArchetype(projectId, id) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return { ok: false, reason: 'project_not_found' };
+    const usedBy = (project.events || []).filter(e => e.archetypeId === id);
+    if (usedBy.length) {
+      return { ok: false, reason: 'in_use', usedBy: usedBy.map(e => ({ id: e.id, name: e.name })) };
+    }
+    project.customArchetypes = (project.customArchetypes || []).filter(a => a.id !== id);
+    this.save(data);
+    return { ok: true };
+  },
+
+  // ── Solution-gap helpers (Phase 7) ───────────────────────
+
+  addGap(projectId, eventId, entry) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return null;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return null;
+    if (!event.solutionGaps) event.solutionGaps = [];
+    const row = {
+      id: (entry && entry.id) || this.generateId(),
+      kind:              (entry && entry.kind)              || 'workaround',
+      sapObject:         (entry && entry.sapObject)         || '',
+      currentWorkaround: (entry && entry.currentWorkaround) || '',
+      targetSolution:    (entry && entry.targetSolution)    || '',
+      status:            (entry && entry.status)            || 'open',
+      notes:             (entry && entry.notes)             || ''
+    };
+    event.solutionGaps.push(row);
+    this.save(data);
+    return row;
+  },
+
+  updateGap(projectId, eventId, gapId, field, value) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    const row = (event.solutionGaps || []).find(g => g.id === gapId);
+    if (!row) return;
+    row[field] = value;
+    this.save(data);
+  },
+
+  deleteGap(projectId, eventId, gapId) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const event = (project.events || []).find(e => e.id === eventId);
+    if (!event) return;
+    event.solutionGaps = (event.solutionGaps || []).filter(g => g.id !== gapId);
     this.save(data);
   }
 };
