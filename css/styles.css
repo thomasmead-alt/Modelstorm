@@ -2658,3 +2658,205 @@ a:hover { color: var(--primary-hover); }
 
 /* Metro: dim section label */
 .dim-section-label { color: var(--text-muted); font-weight: 700; letter-spacing: 0.1em; }
+
+/* ── FI/CO Panel (event-level collapsible) ─────────────── */
+.fico-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--bg-alt);
+}
+.fico-panel[open] { background: var(--bg); }
+.fico-panel-summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  user-select: none;
+  border-radius: 8px;
+}
+.fico-panel-summary::-webkit-details-marker { display: none; }
+.fico-panel[open] .fico-panel-summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+}
+.fico-panel-badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-subtle);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+.fico-panel-warn-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+.fico-panel-body {
+  padding: 14px 16px;
+}
+.fico-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.fico-meta-section { display: flex; flex-direction: column; gap: 4px; }
+.fico-meta-full { grid-column: 1 / -1; }
+.fico-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle);
+  margin-bottom: 2px;
+}
+
+/* ── SAP CO Flow Diagram ─────────────────────────────────── */
+.sap-flow-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 1200px;
+}
+.sap-flow-tier {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.sap-flow-tier-copa { margin-bottom: 16px; }
+.sap-flow-copa-bar {
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+  color: #fff;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sap-flow-copa-title { font-size: 16px; font-weight: 700; }
+.sap-flow-copa-sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.sap-flow-copa-modules { display: flex; gap: 6px; flex-wrap: wrap; }
+.sap-flow-tier-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 14px 4px;
+  color: var(--text-subtle);
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+.sap-flow-tier-hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.sap-flow-tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.sap-flow-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.sap-flow-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 14px;
+  color: var(--text-subtle);
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+.sap-flow-group-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.sap-flow-arrow-hint {
+  font-size: 11px;
+  color: var(--text-subtle);
+  padding: 4px 14px 8px;
+  font-style: italic;
+}
+.sap-flow-flow-arrow {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 14px;
+  background: var(--bg-alt);
+  border-top: 1px solid var(--border);
+}
+.sap-flow-node {
+  border: 1px solid var(--border);
+  border-left: 3px solid #9ca3af;
+  border-radius: 4px;
+  padding: 8px 12px;
+  min-width: 140px;
+  max-width: 240px;
+  background: var(--bg);
+}
+.sap-flow-node-id {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+  margin-bottom: 2px;
+}
+.sap-flow-node-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.sap-flow-node-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.sap-flow-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.sap-flow-recharge-tag {
+  font-size: 10px;
+  color: #c2410c;
+  margin-top: 4px;
+  font-style: italic;
+}
+.sap-flow-legend {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+.sap-flow-legend-section { }
+.sap-flow-legend-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+.sap-flow-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sap-flow-legend-item .sap-flow-badge { flex-shrink: 0; }

@@ -261,7 +261,7 @@ const Projects = {
           <button class="btn btn-ghost btn-sm" onclick="Projects.generateSampleData('${projectId}','${eventId}')">Sample Data</button>
           <button class="btn btn-ghost btn-sm" onclick="Router.navigate('diagram/${eventId}')">View Diagram</button>
           <button class="btn btn-ghost btn-sm" onclick="Projects.duplicateEvent('${projectId}', '${eventId}', true)">Duplicate</button>
-          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('event/${eventId}')">Edit Matrix</button>
+          <button class="btn btn-ghost btn-sm" onclick="Router.navigate('matrix/${eventId}')" title="Legacy spreadsheet view">Matrix View</button>
           <button class="btn btn-primary btn-sm" onclick="Projects.openAddColumnModal('${projectId}', '${eventId}')">+ Add Column</button>
         </div>
       </div>
@@ -284,6 +284,8 @@ const Projects = {
             oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
             style="height:auto">${this._esc(event.notes||'')}</textarea>
         </div>` : ''}
+
+        ${this._eventFicoPanel(event, project)}
 
         <div class="event-detail-layout">
           <div class="col-list-panel">
@@ -1013,6 +1015,383 @@ const Projects = {
     if (!event) return;
     event[field] = value;
     Storage.saveEvent(projectId, event);
+  },
+
+  // Save event field then re-render (for fields that affect which sub-controls are visible)
+  _updateEventFieldAndRefresh(projectId, eventId, field, value) {
+    this.updateEventField(projectId, eventId, field, value);
+    const activeCol = document.querySelector('.col-list-item.active');
+    const colId = activeCol ? activeCol.closest('[onclick]')?.getAttribute('onclick')?.match(/'([^']+)'/g)?.[1]?.replace(/'/g,'') : null;
+    const activeTabs = document.querySelectorAll('.col-detail-tab.active');
+    const tab = activeTabs.length > 0 ? activeTabs[0].dataset.tab : null;
+    Projects.renderEventDetail(projectId, eventId, colId, tab);
+  },
+
+  // Returns true if any FI/CO event-level fields are populated
+  _hasFicoFields(event) {
+    return !!(
+      event.archetypeId || event.sapModule || event.sapProcess || event.sapDocType ||
+      event.postingPattern || event.ficoScope || event.rechargeFromId || event.rechargeToId ||
+      (event.glMappings && event.glMappings.length > 0) ||
+      (event.solutionGaps && event.solutionGaps.length > 0) ||
+      (event.businessAreaIds && event.businessAreaIds.length > 0) ||
+      event.temporalType === 'overTime'
+    );
+  },
+
+  // ── Event-level FI/CO + Planning panel ───────────────────
+
+  _eventFicoPanel(event, project) {
+    const pId = project.id;
+    const eId = event.id;
+    const expanded = this._hasFicoFields(event);
+
+    // Business Areas
+    const allBAs = project.businessAreas || [];
+    const assignedIds = event.businessAreaIds || [];
+    const assignedTags = allBAs.filter(b => assignedIds.includes(b.id)).map(b =>
+      `<span class="ba-tag" style="background:${b.color}" title="Remove"
+        onclick="Projects._removeEventBA('${pId}','${eId}','${b.id}')">
+        ${this._esc(b.name)} <span class="ba-tag-remove">✕</span>
+      </span>`
+    ).join('');
+    const unassigned = allBAs.filter(b => !assignedIds.includes(b.id));
+    const addMenu = unassigned.length
+      ? unassigned.map(b => `<option value="${b.id}">${this._esc(b.name)}</option>`).join('') : '';
+    const noBAs = !allBAs.length
+      ? `<span style="font-size:11px;color:var(--text-subtle)">No business areas — <a href="#business-areas/${pId}" style="color:var(--info)">add them →</a></span>` : '';
+
+    // Planning / temporal
+    const purpose = event.eventPurpose || 'actuals';
+    const isPlanning = purpose !== 'actuals';
+    const temporal = event.temporalType || 'pointInTime';
+    const isOverTime = temporal === 'overTime';
+    const phasing = event.phasingMethod || '';
+    const phasingOpts = `<option value="">— Select method —</option>` +
+      (typeof PHASING_METHODS !== 'undefined'
+        ? Object.entries(PHASING_METHODS).map(([k, m]) =>
+            `<option value="${k}" ${phasing === k ? 'selected' : ''}>${m.label}</option>`).join('') : '');
+
+    // GL Account Mappings
+    const glMappings = event.glMappings || [];
+
+    // FI/CO Archetype
+    const archetypes = (typeof Storage !== 'undefined' && Storage.getAllArchetypes)
+      ? Storage.getAllArchetypes(project) : [];
+    const archetype = archetypes.find(a => a.id === event.archetypeId) || null;
+    const builtInArchs = archetypes.filter(a => !a.isCustom);
+    const customArchs  = archetypes.filter(a =>  a.isCustom);
+    const archOpts =
+      `<option value="">— Unclassified —</option>` +
+      (builtInArchs.length ? `<optgroup label="Built-in">` +
+        builtInArchs.map(a => `<option value="${a.id}" ${event.archetypeId === a.id ? 'selected' : ''}>${this._esc(a.label)}</option>`).join('') +
+        `</optgroup>` : '') +
+      (customArchs.length ? `<optgroup label="Project custom">` +
+        customArchs.map(a => `<option value="${a.id}" ${event.archetypeId === a.id ? 'selected' : ''}>${this._esc(a.label)}</option>`).join('') +
+        `</optgroup>` : '');
+
+    const sapModule = event.sapModule || '';
+    const moduleOpts = `<option value="">— Select module —</option>` +
+      (typeof SAP_MODULES !== 'undefined'
+        ? SAP_MODULES.map(m => `<option value="${m}" ${sapModule === m ? 'selected' : ''}>${m}</option>`).join('') : '');
+
+    const postingPattern = event.postingPattern || '';
+    const postingOpts = `<option value="">— Select pattern —</option>` +
+      (typeof POSTING_PATTERNS !== 'undefined'
+        ? Object.entries(POSTING_PATTERNS).map(([k, p]) =>
+            `<option value="${k}" ${postingPattern === k ? 'selected' : ''}>${p.label}</option>`).join('') : '');
+
+    const ficoScope = event.ficoScope || '';
+    const scopeOpts = `<option value="">— Not set —</option>` +
+      (typeof FICO_SCOPES !== 'undefined'
+        ? Object.entries(FICO_SCOPES).map(([k, s]) =>
+            `<option value="${k}" ${ficoScope === k ? 'selected' : ''}>${s.label}</option>`).join('') : '');
+    const isRecharge = ficoScope === 'recharge';
+
+    // Recharge entities (from/to cost objects)
+    const costObjects = project.costObjects || [];
+    const rechargeFromOpts = `<option value="">— Select entity —</option>` +
+      costObjects.map(o => `<option value="${o.id}" ${event.rechargeFromId === o.id ? 'selected' : ''}>${this._esc(o.objectId || o.description || o.id)}</option>`).join('');
+    const rechargeToOpts = `<option value="">— Select entity —</option>` +
+      costObjects.map(o => `<option value="${o.id}" ${event.rechargeToId === o.id ? 'selected' : ''}>${this._esc(o.objectId || o.description || o.id)}</option>`).join('');
+
+    // Solution Gaps
+    const gapKindDict   = (typeof GAP_KINDS    !== 'undefined') ? GAP_KINDS    : {};
+    const gapStatusDict = (typeof GAP_STATUSES !== 'undefined') ? GAP_STATUSES : {};
+    const gaps = event.solutionGaps || [];
+    const openGapCount = gaps.filter(g => g.status === 'open' || g.status === 'designing').length;
+
+    // Health warnings
+    const whenCols = event.columns.filter(c => c.category === 'when');
+    const anchorCols = whenCols.filter(c => c.isFinancialAnchor);
+    const warnings = [];
+    if (whenCols.length > 0 && anchorCols.length === 0)
+      warnings.push(`⚠ No financial anchor date — set a <em>when</em> column as the financial anchor`);
+    if (anchorCols.length > 1)
+      warnings.push(`⚠ Multiple financial anchors (${anchorCols.length}) — only one expected`);
+    if (isOverTime && !phasing)
+      warnings.push(`⚠ Over-time event requires a phasing method`);
+    if (isOverTime) {
+      const hasStart = whenCols.some(c => c.dateKeyRole === 'plan_start_period');
+      const hasEnd   = whenCols.some(c => c.dateKeyRole === 'plan_end_period');
+      if (!hasStart || !hasEnd)
+        warnings.push(`⚠ Over-time event needs both <em>plan_start_period</em> and <em>plan_end_period</em> date FKs`);
+    }
+    if (archetype && archetype.module && sapModule && archetype.module !== sapModule)
+      warnings.push(`⚠ Archetype expects module <em>${this._esc(archetype.module)}</em> but event is set to <em>${this._esc(sapModule)}</em>`);
+    if (archetype && !sapModule)
+      warnings.push(`⚠ Archetype set — consider picking an SAP module (<em>${this._esc(archetype.module || '—')}</em> typical)`);
+
+    // Summary badge text
+    const badgeParts = [];
+    if (archetype) badgeParts.push(this._esc(archetype.label));
+    if (openGapCount) badgeParts.push(`${openGapCount} gap${openGapCount > 1 ? 's' : ''}`);
+    if (warnings.length) badgeParts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`);
+    const badge = badgeParts.length
+      ? `<span class="fico-panel-badge">${badgeParts.join(' · ')}</span>` : '';
+
+    return `
+      <details class="fico-panel" ${expanded ? 'open' : ''}>
+        <summary class="fico-panel-summary">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" style="width:13px;height:13px;flex-shrink:0"><polygon points="8 1 15 8 8 15 1 8"/></svg>
+          FI/CO &amp; Planning
+          ${badge}
+          ${warnings.length ? `<span class="fico-panel-warn-chip">${warnings.length} warning${warnings.length > 1 ? 's' : ''}</span>` : ''}
+        </summary>
+        <div class="fico-panel-body">
+
+          ${warnings.length ? `<div class="event-health-warnings">${warnings.map(w => `<span class="event-health-warn">${w}</span>`).join('')}</div>` : ''}
+
+          <div class="fico-meta-grid">
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Business Areas</div>
+              <div class="ba-tags">
+                ${assignedTags}
+                ${noBAs}
+                ${unassigned.length ? `<select class="ba-tag-add" onchange="Projects._addEventBA('${pId}','${eId}',this.value);this.value=''">
+                  <option value="">+ Add area</option>${addMenu}</select>` : ''}
+              </div>
+            </div>
+
+            ${isPlanning ? `
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Temporal Type</div>
+              <div style="display:flex;gap:12px;font-size:12px;margin-top:4px">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                  <input type="radio" name="temporal-proj-${eId}" value="pointInTime" ${!isOverTime ? 'checked' : ''}
+                    onchange="Projects._updateEventFieldAndRefresh('${pId}','${eId}','temporalType','pointInTime')">
+                  Point in Time
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                  <input type="radio" name="temporal-proj-${eId}" value="overTime" ${isOverTime ? 'checked' : ''}
+                    onchange="Projects._updateEventFieldAndRefresh('${pId}','${eId}','temporalType','overTime')">
+                  Over Time
+                </label>
+              </div>
+            </div>
+            ${isOverTime ? `
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Phasing Method</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','phasingMethod',this.value)">${phasingOpts}</select>
+              ${phasing && typeof PHASING_METHODS !== 'undefined' && PHASING_METHODS[phasing]
+                ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">${PHASING_METHODS[phasing].description}</div>` : ''}
+            </div>` : ''}` : ''}
+
+            <div class="fico-meta-section fico-meta-full">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div class="fico-meta-label" style="margin-bottom:0">GL Account Mapping</div>
+                <button class="btn-sm" onclick="Projects._addGlMapping('${pId}','${eId}')">+ Add Range</button>
+              </div>
+              ${glMappings.length === 0 ? `<div style="font-size:11px;color:var(--text-subtle)">No GL mappings — document which GL accounts this event's measures post to.</div>` : ''}
+              ${glMappings.map(m => `
+                <div class="gl-mapping-row">
+                  <input class="cell-input" style="flex:2;font-size:12px" placeholder="Label (e.g. Cost postings)"
+                    value="${this._esc(m.label)}" onblur="Projects._updateGlMapping('${pId}','${eId}','${m.id}','label',this.value)">
+                  <input class="cell-input" style="flex:1;font-size:12px;font-family:monospace" placeholder="From"
+                    value="${this._esc(m.accountFrom)}" onblur="Projects._updateGlMapping('${pId}','${eId}','${m.id}','accountFrom',this.value)">
+                  <span style="font-size:11px;color:var(--text-subtle)">–</span>
+                  <input class="cell-input" style="flex:1;font-size:12px;font-family:monospace" placeholder="To"
+                    value="${this._esc(m.accountTo)}" onblur="Projects._updateGlMapping('${pId}','${eId}','${m.id}','accountTo',this.value)">
+                  <input class="cell-input" style="flex:1;font-size:12px" placeholder="Cost elem. group"
+                    value="${this._esc(m.costElementGroup)}" onblur="Projects._updateGlMapping('${pId}','${eId}','${m.id}','costElementGroup',this.value)">
+                  <button class="btn-icon" onclick="Projects._deleteGlMapping('${pId}','${eId}','${m.id}')" title="Remove" style="color:var(--danger)">✕</button>
+                </div>`).join('')}
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">FI/CO Archetype</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','archetypeId',this.value)">${archOpts}</select>
+              ${archetype ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">
+                ${this._esc(archetype.description || '')}
+                ${archetype.typicalTables ? `<br><em>Tables:</em> <code>${this._esc(archetype.typicalTables)}</code>` : ''}
+                ${archetype.typicalDocType ? ` · <em>Doc type:</em> <code>${this._esc(archetype.typicalDocType)}</code>` : ''}
+              </div>` : `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">Classify against a SAP FI/CO pattern — <a href="#ficopatterns/${pId}" style="color:var(--info)">manage patterns →</a></div>`}
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">SAP Module</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','sapModule',this.value)">${moduleOpts}</select>
+              ${archetype && archetype.module ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">Archetype typical: <strong>${this._esc(archetype.module)}</strong></div>` : ''}
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">SAP Process / T-code</div>
+              <input class="cell-input" style="font-size:12px" placeholder="e.g. KSU5 Assessment, VF01 Billing"
+                value="${this._esc(event.sapProcess || '')}"
+                onblur="Projects.updateEventField('${pId}','${eId}','sapProcess',this.value)">
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">SAP Doc Type</div>
+              <input class="cell-input" style="font-size:12px;font-family:monospace" placeholder="e.g. SA, RV, AA"
+                value="${this._esc(event.sapDocType || '')}"
+                onblur="Projects.updateEventField('${pId}','${eId}','sapDocType',this.value)">
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Posting Pattern</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','postingPattern',this.value)">${postingOpts}</select>
+              ${postingPattern && typeof POSTING_PATTERNS !== 'undefined' && POSTING_PATTERNS[postingPattern]
+                ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">${this._esc(POSTING_PATTERNS[postingPattern].description)}</div>` : ''}
+            </div>
+
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">FI/CO Scope</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects._updateEventFieldAndRefresh('${pId}','${eId}','ficoScope',this.value)">${scopeOpts}</select>
+              ${ficoScope && typeof FICO_SCOPES !== 'undefined' && FICO_SCOPES[ficoScope]
+                ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">${FICO_SCOPES[ficoScope].description}</div>` : ''}
+            </div>
+
+            ${isRecharge && costObjects.length > 0 ? `
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Recharge From</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','rechargeFromId',this.value)">${rechargeFromOpts}</select>
+            </div>
+            <div class="fico-meta-section">
+              <div class="fico-meta-label">Recharge To</div>
+              <select class="cell-input" style="font-size:12px"
+                onchange="Projects.updateEventField('${pId}','${eId}','rechargeToId',this.value)">${rechargeToOpts}</select>
+            </div>` : ''}
+
+            <div class="fico-meta-section fico-meta-full">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div class="fico-meta-label" style="margin-bottom:0">
+                  Solution Gaps
+                  ${openGapCount > 0 ? `<span class="additive-badge gap-open-badge" style="margin-left:6px">${openGapCount} open</span>` : ''}
+                </div>
+                <button class="btn-sm" onclick="Projects._addGap('${pId}','${eId}')">+ Add Gap</button>
+              </div>
+              ${gaps.length === 0 ? `<div style="font-size:11px;color:var(--text-subtle)">No gaps flagged — document where standard SAP doesn't deliver (BADIs, missing COPA characteristics, cycle limitations, etc.)</div>` : ''}
+              ${gaps.map(g => {
+                const kindInfo   = gapKindDict[g.kind]   || { label: g.kind   || 'Gap',    color: '#475569', bg: '#f1f5f9' };
+                const statusInfo = gapStatusDict[g.status] || { label: g.status || 'Open',  color: '#475569', bg: '#f1f5f9' };
+                const kindOpts   = Object.entries(gapKindDict).map(([k, v]) =>
+                  `<option value="${k}" ${g.kind === k ? 'selected' : ''}>${this._esc(v.label)}</option>`).join('');
+                const statusOpts = Object.entries(gapStatusDict).map(([k, v]) =>
+                  `<option value="${k}" ${g.status === k ? 'selected' : ''}>${this._esc(v.label)}</option>`).join('');
+                return `
+                  <div class="gap-row">
+                    <select class="cell-select gap-kind" style="flex:1.2;font-size:12px;background:${kindInfo.bg};color:${kindInfo.color}"
+                      onchange="Projects._updateGap('${pId}','${eId}','${g.id}','kind',this.value)">${kindOpts}</select>
+                    <input class="cell-input" style="flex:1.3;font-size:12px" placeholder="SAP object (e.g. COPA value field)"
+                      value="${this._esc(g.sapObject || '')}" onblur="Projects._updateGap('${pId}','${eId}','${g.id}','sapObject',this.value)">
+                    <input class="cell-input" style="flex:1.5;font-size:12px" placeholder="Current workaround"
+                      value="${this._esc(g.currentWorkaround || '')}" onblur="Projects._updateGap('${pId}','${eId}','${g.id}','currentWorkaround',this.value)">
+                    <input class="cell-input" style="flex:1.5;font-size:12px" placeholder="Target solution"
+                      value="${this._esc(g.targetSolution || '')}" onblur="Projects._updateGap('${pId}','${eId}','${g.id}','targetSolution',this.value)">
+                    <select class="cell-select gap-status" style="flex:0.8;font-size:12px;background:${statusInfo.bg};color:${statusInfo.color}"
+                      onchange="Projects._updateGap('${pId}','${eId}','${g.id}','status',this.value)">${statusOpts}</select>
+                    <button class="btn-icon" onclick="Projects._deleteGap('${pId}','${eId}','${g.id}')" title="Remove" style="color:var(--danger)">✕</button>
+                  </div>`;
+              }).join('')}
+            </div>
+
+          </div>
+        </div>
+      </details>
+    `;
+  },
+
+  // ── GL mapping helpers (event-level) ─────────────────────
+
+  _addGlMapping(projectId, eventId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    if (!event.glMappings) event.glMappings = [];
+    event.glMappings.push({ id: Storage.generateId(), label: '', accountFrom: '', accountTo: '', costElementGroup: '', chartOfAccounts: '', sapTransactionCodes: '', affectedColumnIds: [], notes: '' });
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId);
+  },
+
+  _updateGlMapping(projectId, eventId, mappingId, field, value) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    const m = (event.glMappings || []).find(x => x.id === mappingId);
+    if (!m) return;
+    m[field] = value;
+    Storage.saveEvent(projectId, event);
+  },
+
+  _deleteGlMapping(projectId, eventId, mappingId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    event.glMappings = (event.glMappings || []).filter(x => x.id !== mappingId);
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId);
+  },
+
+  // ── Solution gap helpers (event-level in two-column view) ─
+
+  _addGap(projectId, eventId) {
+    Storage.addGap(projectId, eventId, {});
+    Projects.renderEventDetail(projectId, eventId);
+  },
+
+  _updateGap(projectId, eventId, gapId, field, value) {
+    Storage.updateGap(projectId, eventId, gapId, field, value);
+    if (field === 'status' || field === 'kind') Projects.renderEventDetail(projectId, eventId);
+  },
+
+  _deleteGap(projectId, eventId, gapId) {
+    Storage.deleteGap(projectId, eventId, gapId);
+    Projects.renderEventDetail(projectId, eventId);
+  },
+
+  // ── Business area helpers (event-level) ──────────────────
+
+  _addEventBA(projectId, eventId, baId) {
+    if (!baId) return;
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    if (!event.businessAreaIds) event.businessAreaIds = [];
+    if (!event.businessAreaIds.includes(baId)) event.businessAreaIds.push(baId);
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId);
+  },
+
+  _removeEventBA(projectId, eventId, baId) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    event.businessAreaIds = (event.businessAreaIds || []).filter(id => id !== baId);
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId);
   },
 
   // ── Conformed dimension helpers ───────────────────────────

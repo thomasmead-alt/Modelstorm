@@ -142,6 +142,19 @@
         <span class="nav-label">SAP Migration</span>
       </a>
 
+      <a class="nav-item" data-section="sap-flow" data-tip="CO Flow" href="#sap-flow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+          <rect x="9" y="2" width="6" height="4"/>
+          <rect x="2" y="18" width="6" height="4"/>
+          <rect x="16" y="18" width="6" height="4"/>
+          <line x1="12" y1="6" x2="12" y2="12"/>
+          <line x1="12" y1="12" x2="5" y2="18"/>
+          <line x1="12" y1="12" x2="19" y2="18"/>
+          <line x1="5" y1="14" x2="19" y2="14"/>
+        </svg>
+        <span class="nav-label">CO Flow</span>
+      </a>
+
       <a class="nav-item" data-section="ficopatterns" data-tip="FI/CO Patterns" href="#ficopatterns">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
           <polygon points="12 2 22 12 12 22 2 12"/>
@@ -238,6 +251,7 @@
   <script src="js/ddlgen.js"></script>
   <script src="js/sapmigration.js"></script>
   <script src="js/ficopatterns.js"></script>
+  <script src="js/sapflow.js"></script>
   <script src="js/hierarchy.js"></script>
 
   <script>
@@ -534,6 +548,32 @@
       wbs_element:      { label: 'WBS Element',      icon: '⬢', color: '#c2410c', bg: '#fff7ed' },
       company_code:     { label: 'Company Code',     icon: '⬡', color: '#0369a1', bg: '#e0f2fe' },
       controlling_area: { label: 'Controlling Area', icon: '◎', color: '#6b7280', bg: '#f3f4f6' }
+    };
+
+    // ─── Global constants: Cost Centre sub-types ─────────
+    const COST_CENTRE_TYPES = {
+      overhead:   { label: 'Overhead',   color: '#7c3aed', bg: '#f3e8ff', description: 'Indirect overhead — assessed/distributed to production cost centres or directly to CO-PA' },
+      production: { label: 'Production', color: '#065f46', bg: '#d1fae5', description: 'Production cost centres — costs settled directly to CO-PA or via product cost collectors' },
+      service:    { label: 'Service',    color: '#0369a1', bg: '#e0f2fe', description: 'Internal service centres — costs recharged via activity allocation or intercompany billing' },
+      admin:      { label: 'Admin',      color: '#d97706', bg: '#fef3c7', description: 'Administrative cost centres — absorbed into group results via distribution or percentage rule' }
+    };
+
+    // ─── Global constants: CO absorption methods ─────────
+    const ABSORPTION_METHODS = {
+      assessment:     { label: 'Assessment Cycle',      description: 'KSU5/KSV5 cycle — allocates overhead CC costs to receiver objects via secondary cost elements' },
+      distribution:   { label: 'Distribution Cycle',    description: 'KSV5 distribution — redistributes primary costs retaining original cost elements' },
+      activity_alloc: { label: 'Activity Allocation',   description: 'Price × quantity recharge via activity types (KB21N / CATS)' },
+      settlement:     { label: 'Settlement',            description: 'KO88/CJ88 settlement — internal order / WBS settled to cost centre, CO-PA, or fixed assets' },
+      recharge:       { label: 'Intercompany Recharge', description: 'Cross-entity recharge — creates FI document in the receiving company code' },
+      direct:         { label: 'Direct to CO-PA',       description: 'Costs post directly to profitability segments without intermediate objects' }
+    };
+
+    // ─── Global constants: FI/CO event scope ─────────────
+    const FICO_SCOPES = {
+      fi_co:    { label: 'FI + CO',   color: '#166534', bg: '#dcfce7', description: 'Full dual posting — FI document triggers a parallel CO line item (most P&L postings)' },
+      fi_only:  { label: 'FI Only',   color: '#1d4ed8', bg: '#dbeafe', description: 'Posts to FI ledger only — no CO object assigned (balance sheet or statistical items)' },
+      co_only:  { label: 'CO Only',   color: '#7c3aed', bg: '#f3e8ff', description: 'Statistical or internal CO posting without a corresponding FI document' },
+      recharge: { label: 'Recharge',  color: '#c2410c', bg: '#fff7ed', description: 'Cross-entity FI posting using intercompany accounts — creates documents in both company codes' }
     };
 
     // ─── Global constants: SAP subledger modules ──────────
@@ -1348,7 +1388,12 @@
     // ─── Router setup ──────────────────────────────────────
     Router.register('projects', () => Projects.renderList());
     Router.register('project/:id', ({ id }) => Projects.renderProject(id));
-    Router.register('event/:id', ({ id }) => Matrix.renderEvent(id));
+    Router.register('event/:id', ({ id }) => {
+      const found = Storage.getEvent(id);
+      if (found) Projects.renderEventDetail(found.project.id, id, null, null);
+      else Router.navigate('projects');
+    });
+    Router.register('matrix/:id', ({ id }) => Matrix.renderEvent(id));
     Router.register('diagram/:id', ({ id }) => {
       const found = Storage.getEvent(id);
       if (found) Diagram.render(found.event);
@@ -1375,6 +1420,8 @@
     Router.register('responsibility',         ()       => Responsibility.renderProjectPicker());
     Router.register('responsibility/:id',     ({ id }) => Responsibility.render(id));
     Router.register('responsibility-gaps/:id',({ id }) => Responsibility.renderGaps(id));
+    Router.register('sap-flow',              ()       => SapFlow.renderProjectPicker());
+    Router.register('sap-flow/:id',          ({ id }) => SapFlow.render(id));
     Router.register('cashflow',               ()       => CashFlow.renderProjectPicker());
     Router.register('cashflow/:id',           ({ id }) => CashFlow.render(id));
     Router.register('cashflow-coverage/:id',  ({ id }) => CashFlow.renderCoverage(id));

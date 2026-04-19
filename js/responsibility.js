@@ -137,6 +137,10 @@ const Responsibility = {
         <div class="cost-obj-card">
           <span class="cost-obj-color-dot" style="background:${obj.color || info.color}"></span>
           <span class="cost-obj-type-badge" style="background:${info.bg};color:${info.color}">${this._esc(info.label)}</span>
+          ${obj.ccType && typeof COST_CENTRE_TYPES !== 'undefined' && COST_CENTRE_TYPES[obj.ccType]
+            ? `<span class="cost-obj-type-badge" style="background:${COST_CENTRE_TYPES[obj.ccType].bg};color:${COST_CENTRE_TYPES[obj.ccType].color};font-size:9px">${this._esc(COST_CENTRE_TYPES[obj.ccType].label)}</span>` : ''}
+          ${obj.absorptionMethod && typeof ABSORPTION_METHODS !== 'undefined' && ABSORPTION_METHODS[obj.absorptionMethod]
+            ? `<span class="cost-obj-type-badge" style="font-size:9px;background:#f3f4f6;color:#374151">${this._esc(ABSORPTION_METHODS[obj.absorptionMethod].label)}</span>` : ''}
           <strong style="font-size:13px">${this._esc(obj.objectId)}</strong>
           <span style="font-size:12px;color:var(--text-muted);flex:1">${this._esc(obj.description || '')}</span>
           ${obj.controllingArea ? `<span style="font-size:10px;color:var(--text-subtle)">${this._esc(obj.controllingArea)}</span>` : ''}
@@ -202,7 +206,7 @@ const Responsibility = {
       body: `
         <div class="form-group">
           <label class="form-label">Type <span class="required">*</span></label>
-          <select class="form-input" id="coType">
+          <select class="form-input" id="coType" onchange="document.getElementById('coCcTypeGroup').style.display=this.value==='cost_centre'?'':'none'">
             ${typeOptions}
           </select>
         </div>
@@ -217,6 +221,22 @@ const Responsibility = {
         <div class="form-group">
           <label class="form-label">Controlling Area</label>
           <input class="form-input" id="coCa" type="text" placeholder="e.g. 1000" maxlength="10">
+        </div>
+        <div class="form-group" id="coCcTypeGroup" style="display:none">
+          <label class="form-label">Cost Centre Sub-type</label>
+          <select class="form-input" id="coCcType">
+            <option value="">— Not classified —</option>
+            ${typeof COST_CENTRE_TYPES !== 'undefined' ? Object.entries(COST_CENTRE_TYPES).map(([k, v]) =>
+              `<option value="${k}">${this._esc(v.label)} — ${v.description.split('—')[0].trim()}</option>`).join('') : ''}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Absorption Method</label>
+          <select class="form-input" id="coAbsorption">
+            <option value="">— Not set —</option>
+            ${typeof ABSORPTION_METHODS !== 'undefined' ? Object.entries(ABSORPTION_METHODS).map(([k, v]) =>
+              `<option value="${k}">${this._esc(v.label)}</option>`).join('') : ''}
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Colour</label>
@@ -238,10 +258,13 @@ const Responsibility = {
         const description = document.getElementById('coDesc').value.trim();
         const controllingArea = document.getElementById('coCa').value.trim();
         const color = document.getElementById('coColor').value;
+        const ccType = document.getElementById('coCcType').value;
+        const absorptionMethod = document.getElementById('coAbsorption').value;
         if (!objectId) { Modal.shake(); return; }
         const obj = {
           id: Storage.generateId(),
-          type, objectId, description, controllingArea, color
+          type, objectId, description, controllingArea, color,
+          ccType, absorptionMethod
         };
         Storage.saveCostObject(projectId, obj);
         Modal.hide();

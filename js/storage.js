@@ -35,6 +35,12 @@ const Storage = {
     if (!p.responsibilityRegister) p.responsibilityRegister = [];
     // Phase 5: SAP cost object register (replaces people-based register)
     if (!p.costObjects) p.costObjects = [];
+    // Phase 8: enrich existing cost objects with sub-type and absorption method
+    p.costObjects = p.costObjects.map(obj => {
+      if (!obj.ccType)           obj.ccType           = '';
+      if (!obj.absorptionMethod) obj.absorptionMethod = '';
+      return obj;
+    });
     // Phase 7: FI/CO patterns — user-added archetypes on top of the built-in seed
     if (!p.customArchetypes) p.customArchetypes = [];
     // Phase 5: P&L line GL account ranges (migrate per-line if customised)
@@ -69,6 +75,10 @@ const Storage = {
       if (!e.sapDocType)     e.sapDocType     = '';
       if (!e.postingPattern) e.postingPattern = '';
       if (!e.solutionGaps)   e.solutionGaps   = [];
+      // Phase 8: FI/CO scope and recharge relationships
+      if (!e.ficoScope)        e.ficoScope        = '';
+      if (!e.rechargeFromId)   e.rechargeFromId   = '';
+      if (!e.rechargeToId)     e.rechargeToId     = '';
 
       e.columns = (e.columns || []).map(col => {
         // Phase 2: additivity, budget, responsibility, conformed dims
@@ -561,6 +571,18 @@ const Storage = {
     const event = (project.events || []).find(e => e.id === eventId);
     if (!event) return;
     event.solutionGaps = (event.solutionGaps || []).filter(g => g.id !== gapId);
+    this.save(data);
+  },
+
+  // ── Cost object helpers (Phase 8) ────────────────────────
+
+  saveCostObjectField(projectId, objId, field, value) {
+    const data = this.load();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const obj = (project.costObjects || []).find(o => o.id === objId);
+    if (!obj) return;
+    obj[field] = value;
     this.save(data);
   }
 };
