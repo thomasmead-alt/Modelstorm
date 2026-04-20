@@ -642,6 +642,19 @@ const Projects = {
             <label>SCD Type</label>
             <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','scdType',this.value === '' ? null : parseInt(this.value),false)">${scdOpts}</select>
           </div>
+          ${col.category === 'where' ? `
+          <div class="cd-field" style="grid-column:1/-1">
+            <label>CO Receiver Role</label>
+            <select onchange="Projects.updateColField('${pId}','${eId}','${cId}','coReceiverRole',this.value,false)">
+              <option value="" ${!col.coReceiverRole ? 'selected' : ''}>— Not a CO object —</option>
+              ${typeof CO_RECEIVER_ROLES !== 'undefined'
+                ? Object.entries(CO_RECEIVER_ROLES).map(([k, v]) =>
+                    `<option value="${k}" ${col.coReceiverRole === k ? 'selected' : ''}>${v.label}</option>`).join('')
+                : ''}
+            </select>
+            ${col.coReceiverRole && typeof CO_RECEIVER_ROLES !== 'undefined' && CO_RECEIVER_ROLES[col.coReceiverRole]
+              ? `<span class="src-origin-hint">${CO_RECEIVER_ROLES[col.coReceiverRole].description}</span>` : ''}
+          </div>` : ''}
           `}
           <div class="cd-toggle">
             <input type="checkbox" id="nk-${cId}" ${col.isNaturalKey ? 'checked' : ''}
@@ -1090,10 +1103,15 @@ const Projects = {
         customArchs.map(a => `<option value="${a.id}" ${event.archetypeId === a.id ? 'selected' : ''}>${this._esc(a.label)}</option>`).join('') +
         `</optgroup>` : '');
 
-    const sapModule = event.sapModule || '';
-    const moduleOpts = `<option value="">— Select module —</option>` +
-      (typeof SAP_MODULES !== 'undefined'
-        ? SAP_MODULES.map(m => `<option value="${m}" ${sapModule === m ? 'selected' : ''}>${m}</option>`).join('') : '');
+    // Multi-module — an event can touch FI + CO-OM + PM simultaneously
+    const sapModules = event.sapModules || (event.sapModule ? [event.sapModule] : []);
+    const allSapModules = typeof SAP_MODULES !== 'undefined' ? SAP_MODULES : [];
+    const moduleChips = allSapModules.map(m => {
+      const active = sapModules.includes(m);
+      return `<button type="button" class="module-chip${active ? ' active' : ''}"
+        onclick="Projects._toggleSapModule('${pId}','${eId}','${m}')"
+        title="${m}">${this._esc(m)}</button>`;
+    }).join('');
 
     const postingPattern = event.postingPattern || '';
     const postingOpts = `<option value="">— Select pattern —</option>` +
@@ -1231,11 +1249,13 @@ const Projects = {
               </div>` : `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">Classify against a SAP FI/CO pattern — <a href="#ficopatterns/${pId}" style="color:var(--info)">manage patterns →</a></div>`}
             </div>
 
-            <div class="fico-meta-section">
-              <div class="fico-meta-label">SAP Module</div>
-              <select class="cell-input" style="font-size:12px"
-                onchange="Projects.updateEventField('${pId}','${eId}','sapModule',this.value)">${moduleOpts}</select>
-              ${archetype && archetype.module ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:2px">Archetype typical: <strong>${this._esc(archetype.module)}</strong></div>` : ''}
+            <div class="fico-meta-section fico-meta-full">
+              <div class="fico-meta-label">SAP Modules touched by this event</div>
+              <div class="module-chip-group">${moduleChips}</div>
+              ${sapModules.length > 0
+                ? `<div style="font-size:10px;color:var(--text-subtle);margin-top:4px">Active: <strong>${sapModules.join(', ')}</strong></div>` : ''}
+              ${archetype && archetype.module && !sapModules.includes(archetype.module)
+                ? `<div style="font-size:10px;color:#d97706;margin-top:2px">⚠ Archetype typically uses <strong>${this._esc(archetype.module)}</strong></div>` : ''}
             </div>
 
             <div class="fico-meta-section">
@@ -1317,6 +1337,22 @@ const Projects = {
         </div>
       </details>
     `;
+  },
+
+  // Toggle a SAP module on/off in the event's sapModules array
+  _toggleSapModule(projectId, eventId, module) {
+    const project = Storage.getProject(projectId);
+    if (!project) return;
+    const event = project.events.find(e => e.id === eventId);
+    if (!event) return;
+    if (!event.sapModules) event.sapModules = event.sapModule ? [event.sapModule] : [];
+    const idx = event.sapModules.indexOf(module);
+    if (idx >= 0) event.sapModules.splice(idx, 1);
+    else event.sapModules.push(module);
+    // Keep legacy sapModule in sync with first entry for backward compat
+    event.sapModule = event.sapModules[0] || '';
+    Storage.saveEvent(projectId, event);
+    Projects.renderEventDetail(projectId, eventId);
   },
 
   // ── GL mapping helpers (event-level) ─────────────────────

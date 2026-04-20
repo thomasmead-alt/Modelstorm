@@ -2860,3 +2860,23 @@ a:hover { color: var(--primary-hover); }
   color: var(--text-muted);
 }
 .sap-flow-legend-item .sap-flow-badge { flex-shrink: 0; }
+
+/* ── Module chip toggle (multi-select SAP modules) ──────── */
+.module-chip-group { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.module-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text-subtle);
+  cursor: pointer;
+  font-family: monospace;
+}
+.module-chip.active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+.module-chip:hover { opacity: 0.85; }

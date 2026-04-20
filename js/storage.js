@@ -71,6 +71,9 @@ const Storage = {
       // Phase 7: FI/CO pattern — archetype + SAP process anchors + solution-gap register
       if (!e.archetypeId)    e.archetypeId    = '';
       if (!e.sapModule)      e.sapModule      = '';
+      // Phase 9: multi-module — sapModules supersedes single sapModule for events
+      // that touch FI + CO-OM + PM simultaneously. Seed from legacy field if present.
+      if (!e.sapModules)     e.sapModules     = e.sapModule ? [e.sapModule] : [];
       if (!e.sapProcess)     e.sapProcess     = '';
       if (!e.sapDocType)     e.sapDocType     = '';
       if (!e.postingPattern) e.postingPattern = '';
@@ -134,6 +137,8 @@ const Storage = {
         if (!col.unitConversion)  col.unitConversion  = '';
         if (!col.dataQualityRule) col.dataQualityRule = '';
         if (!col.stagingNote)     col.stagingNote     = '';
+        // Phase 9: CO receiver role — only meaningful for 'where' columns
+        if (!col.coReceiverRole)  col.coReceiverRole  = '';
         return col;
       });
       return e;

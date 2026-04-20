@@ -542,12 +542,27 @@
 
     // ─── Global constants: SAP Cost Object types ──────────
     const SAP_COST_OBJECT_TYPES = {
-      cost_centre:      { label: 'Cost Centre',      icon: '⬡', color: '#1d4ed8', bg: '#dbeafe' },
-      profit_centre:    { label: 'Profit Centre',    icon: '◈', color: '#065f46', bg: '#d1fae5' },
-      internal_order:   { label: 'Internal Order',   icon: '⊙', color: '#7c3aed', bg: '#f3e8ff' },
-      wbs_element:      { label: 'WBS Element',      icon: '⬢', color: '#c2410c', bg: '#fff7ed' },
-      company_code:     { label: 'Company Code',     icon: '⬡', color: '#0369a1', bg: '#e0f2fe' },
-      controlling_area: { label: 'Controlling Area', icon: '◎', color: '#6b7280', bg: '#f3f4f6' }
+      cost_centre:        { label: 'Cost Centre',          icon: '⬡', color: '#1d4ed8', bg: '#dbeafe' },
+      profit_centre:      { label: 'Profit Centre',        icon: '◈', color: '#065f46', bg: '#d1fae5' },
+      internal_order:     { label: 'Internal Order',       icon: '⊙', color: '#7c3aed', bg: '#f3e8ff' },
+      wbs_element:        { label: 'WBS Element',          icon: '⬢', color: '#c2410c', bg: '#fff7ed' },
+      equipment:           { label: 'Equipment (EQUI)',        icon: '⚙', color: '#0369a1', bg: '#e0f2fe' },
+      functional_location: { label: 'Functional Location (FLOC)', icon: '📍', color: '#4d7c0f', bg: '#ecfccb' },
+      re_business_entity:  { label: 'RE Business Entity',    icon: '🏢', color: '#0891b2', bg: '#cffafe' },
+      re_building:         { label: 'RE Building',           icon: '🏗', color: '#0891b2', bg: '#e0f2fe' },
+      re_rental_unit:      { label: 'RE Rental Unit',        icon: '🏠', color: '#0369a1', bg: '#e0f2fe' },
+      re_rental_agreement: { label: 'RE Rental Agreement',   icon: '📄', color: '#6b7280', bg: '#f3f4f6' },
+      company_code:        { label: 'Company Code',          icon: '⬡', color: '#1d4ed8', bg: '#dbeafe' },
+      controlling_area:    { label: 'Controlling Area',      icon: '◎', color: '#6b7280', bg: '#f3f4f6' }
+    };
+
+    // ─── Global constants: CO receiver roles (column-level) ─
+    // Applies to 'where' category columns that represent a CO account assignment object.
+    // Only one column per event should be marked real_receiver for any given posting.
+    const CO_RECEIVER_ROLES = {
+      real_receiver: { label: 'Real Receiver',   color: '#065f46', bg: '#d1fae5', description: 'The primary CO account assignment object — costs actually settle here (e.g. cost centre KOSTL, internal order AUFNR, WBS POSID). Only one per posting.' },
+      statistical:   { label: 'Statistical',     color: '#7c3aed', bg: '#f3e8ff', description: 'Statistical posting — informational only, costs do not settle here. Common for statistical internal orders alongside a real cost centre.' },
+      not_applicable: { label: 'Not applicable', color: '#6b7280', bg: '#f3f4f6', description: 'This dimension is not a CO account assignment object (e.g. customer, plant, product).' }
     };
 
     // ─── Global constants: Cost Centre sub-types ─────────
